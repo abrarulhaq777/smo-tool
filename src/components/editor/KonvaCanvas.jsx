@@ -8,9 +8,13 @@ export const KonvaCanvas = ({
   onSelect,
   onChangeLayer,
   scale = 1,
-  canvasConfig
+  canvasConfig,
+  stageRef: externalStageRef
 }) => {
-  const stageRef = useRef(null);
+  // Use the parent-provided ref when given (for PNG export / AI live preview),
+  // otherwise fall back to a local ref for internal transformer logic.
+  const internalStageRef = useRef(null);
+  const stageRef = externalStageRef || internalStageRef;
   const transformerRef = useRef(null);
   
   // Double-click inline text editing state
@@ -38,7 +42,7 @@ export const KonvaCanvas = ({
     const layerData = layers.find((l) => l.id === selectedId);
 
     // Attach transformer if the layer is editable and not locked
-    if (selectedNode && layerData && layerData.editable && !layerData.locked) {
+    if (selectedNode && layerData && layerData.editable !== false && !layerData.locked) {
       tr.nodes([selectedNode]);
     } else {
       tr.nodes([]);
@@ -58,7 +62,7 @@ export const KonvaCanvas = ({
   // Trigger double-click inline text edit overlay
   const handleDoubleClick = (layerId) => {
     const layer = layers.find((l) => l.id === layerId);
-    if (!layer || layer.type !== 'text' || !layer.editable || layer.locked) return;
+    if (!layer || layer.type !== 'text' || layer.editable === false || layer.locked) return;
 
     const stage = stageRef.current;
     const textNode = stage.findOne('#' + layerId);
@@ -153,6 +157,7 @@ export const KonvaCanvas = ({
                 return newBox;
               }}
               rotateEnabled={true}
+              keepRatio={false}
               enabledAnchors={['top-left', 'top-right', 'bottom-left', 'bottom-right', 'top-center', 'bottom-center', 'left-center', 'right-center']}
             />
           </Layer>

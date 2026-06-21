@@ -11,6 +11,8 @@ import {
   AlignLeft, AlignCenter, AlignRight, Check, ArrowUp, ArrowDown
 } from 'lucide-react';
 import { Loader } from '../components/Loader';
+import { ToastContainer } from '../components/Toast';
+import { ICON_LIBRARY } from '../components/editor/IconLayer';
 
 const AVAILABLE_FONTS = ['Poppins', 'Montserrat', 'Inter', 'Outfit', 'Roboto', 'Playfair Display'];
 
@@ -44,6 +46,11 @@ export const PosterEditor = () => {
   const [showTextDropdown, setShowTextDropdown] = useState(false);
   const [showShapesDropdown, setShowShapesDropdown] = useState(false);
   const [showPremiumDropdown, setShowPremiumDropdown] = useState(false);
+  const [showElementsDropdown, setShowElementsDropdown] = useState(false);
+
+  // AI connection code (shown to the user to paste into Claude) + right-panel tab
+  const [connectCode, setConnectCode] = useState(null);
+  const [rightTab, setRightTab] = useState('properties'); // 'layers' | 'properties'
 
   // Undo/Redo History Stack
   const [history, setHistory] = useState([]);
@@ -53,6 +60,9 @@ export const PosterEditor = () => {
   const containerRef = useRef(null);
   const stageRef = useRef(null);
   const [scale, setScale] = useState(0.5);
+
+  // Image-by-URL input (alongside local upload)
+  const [imageUrlInput, setImageUrlInput] = useState('');
 
   // Hidden File Input Trigger
   const fileInputRef = useRef(null);
@@ -167,6 +177,93 @@ export const PosterEditor = () => {
     }
   };
 
+  // ─── AI LIVE CHANNEL (MCP) ────────────────────────────────────────────────
+  // The external AI host (Claude) edits this open poster through the MCP server:
+  // it pushes design JSON down to us over SSE, and reads our current design +
+  // rendered preview that we stream back up over REST.
+  const [aiLive, setAiLive] = useState(false);
+
+  // Keep the latest design in a ref so SSE handlers never read stale state.
+  const designRef = useRef(null);
+  useEffect(() => {
+    designRef.current = { canvas: canvasConfig, theme, layers };
+  }, [canvasConfig, theme, layers]);
+
+  const capturePreview = () => {
+    const stage = stageRef.current;
+    if (!stage) return null;
+    try {
+      return stage.toDataURL({ pixelRatio: 1 });
+    } catch {
+      return null; // tainted canvas (cross-origin image) — skip preview
+    }
+  };
+
+  // Push our current design + rendered preview up so the AI host can read/verify it.
+  const pushStateUp = () => {
+    const token = localStorage.getItem('trendbite_token');
+    if (!token || !designRef.current) return;
+    api.post('/designs/live/sync', {
+      planId,
+      design: designRef.current,
+      preview: capturePreview(),
+    }).catch(() => {});
+  };
+
+  // Apply an AI-pushed design to the canvas.
+  const applyAiDesign = (design) => {
+    const validated = validateDesignJson(design);
+    if (!validated) {
+      addNotification('error', 'AI sent an invalid design');
+      return;
+    }
+    setCanvasConfig(validated.canvas);
+    setTheme(validated.theme);
+    updateLayersState(validated.layers); // recorded in undo history
+    setSelectedId(null);
+    addNotification('success', 'AI updated the poster design');
+  };
+
+  // Open the SSE stream once the editor has finished loading.
+  useEffect(() => {
+    if (loading || !planId) return;
+    const token = localStorage.getItem('trendbite_token');
+    if (!token) return;
+
+    const base = import.meta.env.VITE_API_URL || 'http://localhost:5002/api';
+    const es = new EventSource(
+      `${base}/designs/live/${planId}/stream?token=${encodeURIComponent(token)}`
+    );
+
+    es.addEventListener('connected', (e) => {
+      setAiLive(true);
+      try {
+        const { code } = JSON.parse(e.data);
+        if (code) setConnectCode(code);
+      } catch { /* ignore */ }
+    });
+    es.addEventListener('design', (e) => {
+      try {
+        applyAiDesign(JSON.parse(e.data).design);
+      } catch {
+        /* ignore malformed event */
+      }
+    });
+    // AI asked for a fresh render of the current canvas.
+    es.addEventListener('render', () => setTimeout(pushStateUp, 60));
+    es.onerror = () => setAiLive(false);
+
+    return () => es.close();
+  }, [loading, planId]);
+
+  // Stream current state up (debounced) on load and after any change — local or
+  // AI-driven — so the host always sees an up-to-date design and preview.
+  useEffect(() => {
+    if (loading) return;
+    const t = setTimeout(pushStateUp, 800);
+    return () => clearTimeout(t);
+  }, [layers, canvasConfig, theme, loading]);
+
   const handleUndo = () => {
     if (historyIndex > 0) {
       const prevIndex = historyIndex - 1;
@@ -199,9 +296,11 @@ export const PosterEditor = () => {
   // 5. Canvas Layer Insertion Actions
   const handleSelect = (id) => {
     setSelectedId(id);
+    if (id) setRightTab('properties');
     setShowTextDropdown(false);
     setShowShapesDropdown(false);
     setShowPremiumDropdown(false);
+    setShowElementsDropdown(false);
   };
 
   const addTextLayer = () => {
@@ -517,6 +616,109 @@ export const PosterEditor = () => {
     handleSelect(newPlaceholder.id);
   };
 
+  // Generic inserter for the new element library. Centers the element on the canvas.
+  const addElement = (type, props = {}) => {
+    const w = props.width || 160;
+    const h = props.height || 160;
+    const newLayer = {
+      id: `${type}_${Date.now()}`,
+      type,
+      x: Math.round((canvasConfig.width - w) / 2),
+      y: Math.round((canvasConfig.height - h) / 2),
+      width: w,
+      height: h,
+      opacity: 1,
+      locked: false,
+      editable: true,
+      ...props,
+    };
+    updateLayersState([...layers, newLayer]);
+    handleSelect(newLayer.id);
+  };
+
+  const ELEMENT_INSERTERS = [
+    { label: 'QR Code', type: 'qr_code', props: { width: 220, height: 220, value: 'https://example.com', fill: '#000000', bgColor: '#FFFFFF' } },
+    { label: 'Icon', type: 'icon', props: { width: 80, height: 80, icon: 'star', fill: theme.primaryColor || '#EA580C' } },
+    { label: 'Offer Ribbon', type: 'ribbon', props: { width: 320, height: 90, text: 'SALE', fill: '#DC2626', textColor: '#FFFFFF', fontSize: 30, fontFamily: theme.fontFamily, fontStyle: 'bold' } },
+    { label: 'Speech Bubble', type: 'speech_bubble', props: { width: 300, height: 200, text: 'Hello!', fill: '#1E293B', textColor: '#FFFFFF', fontSize: 28, fontFamily: theme.fontFamily } },
+    { label: 'Triangle', type: 'triangle', props: { width: 140, height: 140, fill: theme.primaryColor || '#3B82F6' } },
+    { label: 'Hexagon', type: 'hexagon', props: { width: 150, height: 150, fill: '#8B5CF6' } },
+    { label: 'Heart', type: 'heart', props: { width: 140, height: 140, fill: '#EF4444' } },
+    { label: 'Shield', type: 'shield', props: { width: 140, height: 160, fill: '#0EA5E9' } },
+    { label: 'Curved Text', type: 'curved_text', props: { width: 320, height: 320, text: 'YOUR TEXT HERE', fill: theme.accentColor || '#111827', fontSize: 30, fontFamily: theme.fontFamily, fontStyle: 'bold' } },
+    { label: 'Divider', type: 'divider', props: { width: 340, height: 24, stroke: theme.accentColor || '#94A3B8' } },
+    { label: 'Progress Bar', type: 'progress_bar', props: { width: 380, height: 28, value: 70, fill: '#22C55E', trackColor: '#E2E8F0' } },
+    { label: 'Star Rating', type: 'rating', props: { width: 280, height: 56, value: 5, max: 5, fill: '#FACC15' } },
+    { label: 'Ashoka Chakra', type: 'chakra', props: { width: 180, height: 180, spokes: 24, fill: '#000080' } },
+    { label: 'Dot Pattern', type: 'pattern', props: { width: 420, height: 420, variant: 'dots', fill: '#CBD5E1', gap: 36 } },
+    { label: 'Angled Block', type: 'angled_block', props: { width: 460, height: 320, skew: 0.18, direction: 'right', fill: '#1E293B' } },
+    { label: 'Checklist', type: 'checklist', props: { width: 440, height: 232, rowHeight: 58, fontSize: 26, items: ['Front Office Staff', 'Accountant Staff', 'Graphic Designer', 'Website Designer'], checkColor: '#F59E0B', textColor: '#1E293B' } },
+  ];
+
+  // Left-rail element library: a glyph + label per item, grouped by section.
+  const el = (type) => {
+    const found = ELEMENT_INSERTERS.find((e) => e.type === type);
+    return () => addElement(type, found ? found.props : {});
+  };
+  const INSERT_SECTIONS = [
+    {
+      title: 'Text',
+      items: [
+        { label: 'Heading', glyph: 'H', onClick: addHeadingLayer },
+        { label: 'Body', glyph: '¶', onClick: addTextLayer },
+        { label: 'Curved', glyph: '◠', onClick: el('curved_text') },
+      ],
+    },
+    {
+      title: 'Shapes',
+      items: [
+        { label: 'Rectangle', glyph: '▭', onClick: addShapeLayer },
+        { label: 'Circle', glyph: '●', onClick: addCircleLayer },
+        { label: 'Ellipse', glyph: '⬭', onClick: addEllipseLayer },
+        { label: 'Triangle', glyph: '▲', onClick: el('triangle') },
+        { label: 'Hexagon', glyph: '⬡', onClick: el('hexagon') },
+        { label: 'Star', glyph: '★', onClick: addStarLayer },
+        { label: 'Polygon', glyph: '⬠', onClick: addPolygonLayer },
+        { label: 'Heart', glyph: '♥', onClick: el('heart') },
+        { label: 'Shield', glyph: '🛡', onClick: el('shield') },
+        { label: 'Line', glyph: '―', onClick: addLineLayer },
+        { label: 'Arrow', glyph: '➔', onClick: addArrowLayer },
+      ],
+    },
+    {
+      title: 'Decor',
+      items: [
+        { label: 'Gradient', glyph: '▦', onClick: addGradientRectLayer },
+        { label: 'Blob', glyph: '✿', onClick: addBlobLayer },
+        { label: 'Wave', glyph: '〰', onClick: addWaveLayer },
+        { label: 'Badge', glyph: '🏷', onClick: addBadgeLayer },
+        { label: 'Button', glyph: '⬛', onClick: addButtonLayer },
+        { label: 'Ribbon', glyph: '🎀', onClick: el('ribbon') },
+        { label: 'Bubble', glyph: '💬', onClick: el('speech_bubble') },
+        { label: 'Divider', glyph: '—', onClick: el('divider') },
+        { label: 'Pattern', glyph: '⠿', onClick: el('pattern') },
+        { label: 'Angled', glyph: '◣', onClick: el('angled_block') },
+      ],
+    },
+    {
+      title: 'Smart',
+      items: [
+        { label: 'QR Code', glyph: '▣', onClick: el('qr_code') },
+        { label: 'Icon', glyph: '☆', onClick: el('icon') },
+        { label: 'Checklist', glyph: '☑', onClick: el('checklist') },
+        { label: 'Rating', glyph: '✦', onClick: el('rating') },
+        { label: 'Progress', glyph: '▰', onClick: el('progress_bar') },
+        { label: 'Chakra', glyph: '☸', onClick: el('chakra') },
+      ],
+    },
+    {
+      title: 'Media',
+      items: [
+        { label: 'Image Box', glyph: '🖼', onClick: addPlaceholderLayer },
+      ],
+    },
+  ];
+
   const bringForward = () => {
     if (!selectedId) return;
     const idx = layers.findIndex(l => l.id === selectedId);
@@ -581,6 +783,26 @@ export const PosterEditor = () => {
     reader.readAsDataURL(file);
   };
 
+  // Apply an external image URL to the selected image layer. The image is fetched
+  // through the backend proxy and embedded as a data URL, so it displays AND
+  // exports regardless of the source host's CORS policy.
+  const applyImageUrl = async () => {
+    const url = imageUrlInput.trim();
+    if (!url || !selectedLayer) return;
+    if (!/^https?:\/\//i.test(url)) {
+      addNotification('warning', 'Enter a valid image URL (http:// or https://)');
+      return;
+    }
+    try {
+      const res = await api.get('/designs/image-proxy', { params: { url } });
+      updateSelectedLayer({ imageUrl: res.data.dataUrl, type: 'image_placeholder' });
+      setImageUrlInput('');
+      addNotification('success', 'Image added from URL');
+    } catch (err) {
+      addNotification('error', err.response?.data?.message || 'Could not load that image URL');
+    }
+  };
+
   const removeImage = () => {
     updateSelectedLayer({ imageUrl: null });
   };
@@ -639,6 +861,9 @@ export const PosterEditor = () => {
     }, 80);
   };
 
+  // Shared input styling for the properties panel
+  const fieldCls = 'w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary text-foreground bg-transparent';
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center">
@@ -692,175 +917,35 @@ export const PosterEditor = () => {
               <Redo2 className="w-4.5 h-4.5" />
             </button>
           </div>
-
-          <div className="h-5 w-[1px] bg-card-border" />
-
-          {/* Quick Insert Elements Dropdowns */}
-          <div className="flex items-center gap-2">
-            
-            {/* Text Inserter */}
-            <div className="relative">
-              <button
-                onClick={() => {
-                  setShowTextDropdown(!showTextDropdown);
-                  setShowShapesDropdown(false);
-                  setShowPremiumDropdown(false);
-                }}
-                className="flex items-center gap-1 px-3 py-1.5 bg-card border border-card-border hover:bg-card/25 rounded-lg text-xs font-semibold transition-colors"
-              >
-                <Type className="w-3.5 h-3.5 text-primary" />
-                <span>Text</span>
-                <span className="text-[10px] opacity-60">▼</span>
-              </button>
-              {showTextDropdown && (
-                <div className="absolute top-full left-0 mt-1 w-44 bg-[#1E1E24] border border-card-border rounded-lg shadow-xl py-1 z-50">
-                  <button
-                    onClick={() => { addHeadingLayer(); setShowTextDropdown(false); }}
-                    className="w-full text-left px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card/30 transition-colors font-bold"
-                  >
-                    Add Large Heading
-                  </button>
-                  <button
-                    onClick={() => { addTextLayer(); setShowTextDropdown(false); }}
-                    className="w-full text-left px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card/30 transition-colors"
-                  >
-                    Add Paragraph Text
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Shape Inserter */}
-            <div className="relative">
-              <button
-                onClick={() => {
-                  setShowShapesDropdown(!showShapesDropdown);
-                  setShowTextDropdown(false);
-                  setShowPremiumDropdown(false);
-                }}
-                className="flex items-center gap-1 px-3 py-1.5 bg-card border border-card-border hover:bg-card/25 rounded-lg text-xs font-semibold transition-colors"
-              >
-                <Square className="w-3.5 h-3.5 text-secondary" />
-                <span>Shapes</span>
-                <span className="text-[10px] opacity-60">▼</span>
-              </button>
-              {showShapesDropdown && (
-                <div className="absolute top-full left-0 mt-1 w-44 bg-[#1E1E24] border border-card-border rounded-lg shadow-xl py-1 z-50">
-                  <button
-                    onClick={() => { addShapeLayer(); setShowShapesDropdown(false); }}
-                    className="w-full text-left px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card/30 transition-colors"
-                  >
-                    Rectangle
-                  </button>
-                  <button
-                    onClick={() => { addCircleLayer(); setShowShapesDropdown(false); }}
-                    className="w-full text-left px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card/30 transition-colors"
-                  >
-                    Circle
-                  </button>
-                  <button
-                    onClick={() => { addEllipseLayer(); setShowShapesDropdown(false); }}
-                    className="w-full text-left px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card/30 transition-colors"
-                  >
-                    Ellipse
-                  </button>
-                  <button
-                    onClick={() => { addStarLayer(); setShowShapesDropdown(false); }}
-                    className="w-full text-left px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card/30 transition-colors"
-                  >
-                    Star Shape
-                  </button>
-                  <button
-                    onClick={() => { addPolygonLayer(); setShowShapesDropdown(false); }}
-                    className="w-full text-left px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card/30 transition-colors"
-                  >
-                    Triangle (Polygon)
-                  </button>
-                  <button
-                    onClick={() => { addLineLayer(); setShowShapesDropdown(false); }}
-                    className="w-full text-left px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card/30 transition-colors"
-                  >
-                    Horizontal Line
-                  </button>
-                  <button
-                    onClick={() => { addArrowLayer(); setShowShapesDropdown(false); }}
-                    className="w-full text-left px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card/30 transition-colors"
-                  >
-                    Directional Arrow
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Premium Decor Inserter */}
-            <div className="relative">
-              <button
-                onClick={() => {
-                  setShowPremiumDropdown(!showPremiumDropdown);
-                  setShowTextDropdown(false);
-                  setShowShapesDropdown(false);
-                }}
-                className="flex items-center gap-1 px-3 py-1.5 bg-card border border-card-border hover:bg-card/25 rounded-lg text-xs font-semibold transition-colors"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                <span>Decor & Layout</span>
-                <span className="text-[10px] opacity-60">▼</span>
-              </button>
-              {showPremiumDropdown && (
-                <div className="absolute top-full left-0 mt-1 w-52 bg-[#1E1E24] border border-card-border rounded-lg shadow-xl py-1 z-50">
-                  <button
-                    onClick={() => { addGradientRectLayer(); setShowPremiumDropdown(false); }}
-                    className="w-full text-left px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card/30 transition-colors"
-                  >
-                    Gradient Background
-                  </button>
-                  <button
-                    onClick={() => { addBlobLayer(); setShowPremiumDropdown(false); }}
-                    className="w-full text-left px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card/30 transition-colors"
-                  >
-                    Organic Blob Shape
-                  </button>
-                  <button
-                    onClick={() => { addWaveLayer(); setShowPremiumDropdown(false); }}
-                    className="w-full text-left px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card/30 transition-colors"
-                  >
-                    Decorative Wave
-                  </button>
-                  <button
-                    onClick={() => { addBadgeLayer(); setShowPremiumDropdown(false); }}
-                    className="w-full text-left px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card/30 transition-colors"
-                  >
-                    Offer Badge Shape
-                  </button>
-                  <button
-                    onClick={() => { addButtonLayer(); setShowPremiumDropdown(false); }}
-                    className="w-full text-left px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card/30 transition-colors font-bold"
-                  >
-                    Call to Action Button
-                  </button>
-                  <button
-                    onClick={() => { addIconLayer(); setShowPremiumDropdown(false); }}
-                    className="w-full text-left px-4 py-2 text-xs text-muted-foreground hover:text-foreground hover:bg-card/30 transition-colors"
-                  >
-                    Icon Placeholder
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Image Box */}
-            <button
-              onClick={addPlaceholderLayer}
-              className="flex items-center gap-1 px-3 py-1.5 bg-card border border-card-border hover:bg-card/25 rounded-lg text-xs font-semibold transition-colors"
-            >
-              <ImageIcon className="w-3.5 h-3.5 text-teal-500" />
-              <span>Image Box</span>
-            </button>
-          </div>
         </div>
 
         {/* Save & Export */}
         <div className="flex items-center gap-2">
+          {/* AI connect code — paste into Claude to pair this editor */}
+          {connectCode && (
+            <button
+              onClick={() => { navigator.clipboard?.writeText(connectCode); addNotification('success', 'Connect code copied'); }}
+              title="Give this code to Claude: say &quot;connect to editor CODE&quot;. Click to copy."
+              className="group flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border border-purple-400/40 bg-purple-500/10 text-purple-200 hover:bg-purple-500/20 transition-colors"
+            >
+              <Sparkles className="w-3 h-3 text-purple-300" />
+              <span className="opacity-70">AI&nbsp;Code</span>
+              <span className="font-mono tracking-widest text-purple-100">{connectCode}</span>
+              <Copy className="w-3 h-3 opacity-50 group-hover:opacity-100" />
+            </button>
+          )}
+          {/* AI live channel status (MCP) */}
+          <div
+            title={aiLive ? 'AI live channel connected — generate from Claude via MCP' : 'AI live channel offline'}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
+              aiLive
+                ? 'border-emerald-400/40 text-emerald-300 bg-emerald-500/10'
+                : 'border-card-border text-muted-foreground bg-card/30'
+            }`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full ${aiLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/50'}`} />
+            <span>AI {aiLive ? 'Live' : 'Off'}</span>
+          </div>
           <button
             onClick={handleSaveDesign}
             disabled={saving}
@@ -882,50 +967,31 @@ export const PosterEditor = () => {
       {/* 2. Main Workspace Layout */}
       <div className="flex-1 flex overflow-hidden min-h-0">
         
-        {/* Left Side: Layer Hierarchy/Outline */}
-        <aside className="w-64 border-r border-card-border bg-card flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-card-border">
-            <h3 className="text-xs uppercase font-extrabold tracking-wider text-muted-foreground">Layers Panel</h3>
+        {/* Left Side: Elements / Insert Rail */}
+        <aside className="w-60 border-r border-card-border bg-card flex flex-col overflow-hidden">
+          <div className="px-4 py-3.5 border-b border-card-border flex items-center gap-2">
+            <Plus className="w-4 h-4 text-emerald-400" />
+            <h3 className="text-xs uppercase font-extrabold tracking-wider text-foreground">Elements</h3>
           </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
-            {layers.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center pt-8">No layers in document</p>
-            ) : (
-              layers.map((l) => (
-                <button
-                  key={l.id}
-                  onClick={() => handleSelect(l.id)}
-                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs transition-all border text-left ${
-                    l.id === selectedId 
-                      ? 'bg-primary/15 border-primary/30 font-semibold text-white' 
-                      : 'border-transparent hover:bg-card/20 text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    {l.type === 'text' && <Type className="w-3.5 h-3.5 flex-shrink-0" />}
-                    {(l.type === 'rect' || l.type === 'gradient_rect') && <Square className="w-3.5 h-3.5 flex-shrink-0" />}
-                    {l.type === 'circle' && <div className="w-3 h-3 rounded-full border border-current flex-shrink-0" />}
-                    {l.type === 'ellipse' && <div className="w-3.5 h-2 rounded-full border border-current flex-shrink-0" />}
-                    {l.type === 'image_placeholder' && <ImageIcon className="w-3.5 h-3.5 flex-shrink-0" />}
-                    {l.type === 'button' && <span className="text-[9px] uppercase font-bold border border-current px-1 rounded flex-shrink-0 font-mono text-primary-light">Btn</span>}
-                    {l.type === 'badge' && <span className="text-[9px] uppercase font-bold border border-current px-1 rounded flex-shrink-0 font-mono text-red-500">Bdg</span>}
-                    {l.type === 'star' && <span className="text-yellow-500 font-bold flex-shrink-0 text-xs">★</span>}
-                    {l.type === 'polygon' && <span className="text-blue-500 font-bold flex-shrink-0 text-[10px]">▲</span>}
-                    {l.type === 'line' && <span className="font-bold flex-shrink-0 text-xs">―</span>}
-                    {l.type === 'arrow' && <span className="font-bold flex-shrink-0 text-xs">➔</span>}
-                    {l.type === 'blob' && <span className="text-purple-400 flex-shrink-0 text-xs">✿</span>}
-                    {l.type === 'wave' && <span className="text-blue-400 flex-shrink-0 text-xs">~</span>}
-                    {l.type === 'icon_placeholder' && <span className="text-gray-400 flex-shrink-0 text-xs">★</span>}
-                    <span className="truncate">
-                      {l.type === 'text' ? l.text : l.id}
-                    </span>
-                  </div>
-                  {l.locked && (
-                    <span className="text-[10px] text-muted-foreground/60 uppercase font-mono">Locked</span>
-                  )}
-                </button>
-              ))
-            )}
+          <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
+            {INSERT_SECTIONS.map((section) => (
+              <div key={section.title}>
+                <p className="text-[10px] uppercase font-bold text-muted-foreground/70 tracking-wider px-1 mb-2">{section.title}</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {section.items.map((item) => (
+                    <button
+                      key={item.label}
+                      onClick={item.onClick}
+                      title={`Add ${item.label}`}
+                      className="group flex flex-col items-center justify-center gap-1 aspect-square rounded-xl border border-card-border bg-card/20 hover:bg-primary/10 hover:border-primary/40 transition-all"
+                    >
+                      <span className="text-base leading-none group-hover:scale-110 transition-transform">{item.glyph}</span>
+                      <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight px-0.5">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </aside>
 
@@ -950,10 +1016,58 @@ export const PosterEditor = () => {
 
         {/* Right Side: Property Sidebar Panel */}
         <aside className="w-80 border-l border-card-border bg-card flex flex-col overflow-hidden">
-          <div className="p-4 border-b border-card-border flex items-center justify-between">
-            <h3 className="text-xs uppercase font-extrabold tracking-wider text-muted-foreground">Properties Panel</h3>
+          {/* Tabs: Layers / Properties */}
+          <div className="flex border-b border-card-border flex-shrink-0">
+            {['layers', 'properties'].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setRightTab(tab)}
+                className={`flex-1 py-3 text-[11px] uppercase font-bold tracking-wider transition-colors ${
+                  rightTab === tab
+                    ? 'text-foreground border-b-2 border-primary bg-card/20'
+                    : 'text-muted-foreground hover:text-foreground border-b-2 border-transparent'
+                }`}
+              >
+                {tab === 'layers' ? `Layers${layers.length ? ` · ${layers.length}` : ''}` : 'Properties'}
+              </button>
+            ))}
           </div>
 
+          {/* Layers tab */}
+          {rightTab === 'layers' && (
+            <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+              {layers.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center pt-8">No layers yet — add from the Elements panel.</p>
+              ) : (
+                [...layers].reverse().map((l) => (
+                  <button
+                    key={l.id}
+                    onClick={() => handleSelect(l.id)}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs transition-all border text-left ${
+                      l.id === selectedId
+                        ? 'bg-primary/15 border-primary/30 font-semibold text-white'
+                        : 'border-transparent hover:bg-card/20 text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      {l.type === 'text' && <Type className="w-3.5 h-3.5 flex-shrink-0" />}
+                      {(l.type === 'rect' || l.type === 'gradient_rect') && <Square className="w-3.5 h-3.5 flex-shrink-0" />}
+                      {l.type === 'circle' && <div className="w-3 h-3 rounded-full border border-current flex-shrink-0" />}
+                      {l.type === 'image_placeholder' && <ImageIcon className="w-3.5 h-3.5 flex-shrink-0" />}
+                      {!['text', 'rect', 'gradient_rect', 'circle', 'image_placeholder'].includes(l.type) && (
+                        <span className="w-3.5 text-center flex-shrink-0 text-[11px] opacity-70">◆</span>
+                      )}
+                      <span className="truncate">{l.type === 'text' ? l.text : (l.id || l.type)}</span>
+                    </div>
+                    {l.locked && <span className="text-[10px] text-muted-foreground/60 uppercase font-mono">🔒</span>}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+
+          {/* Properties tab */}
+          {rightTab === 'properties' && (
           <div className="flex-1 overflow-y-auto p-5 space-y-6">
             {!selectedLayer ? (
               <div className="text-center py-20">
@@ -1064,6 +1178,77 @@ export const PosterEditor = () => {
                 </div>
 
                 <div className="h-[1px] bg-card-border" />
+
+                {/* 1b. Element-specific options */}
+                {['polygon', 'star', 'wave', 'chakra', 'pattern', 'progress_bar', 'rating', 'angled_block', 'qr_code', 'icon', 'checklist', 'ribbon', 'badge', 'speech_bubble'].includes(selectedLayer.type) && (
+                  <>
+                    <div className="space-y-3">
+                      <h4 className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Element Options</h4>
+                      <div className="grid grid-cols-2 gap-3">
+                        {selectedLayer.type === 'polygon' && (
+                          <div><label className="text-[10px] text-muted-foreground block mb-1">Sides</label>
+                            <input type="number" min="3" value={selectedLayer.sides || 3} onChange={(e) => updateSelectedLayer({ sides: Math.max(3, Number(e.target.value)) })} className={fieldCls} /></div>
+                        )}
+                        {selectedLayer.type === 'star' && (<>
+                          <div><label className="text-[10px] text-muted-foreground block mb-1">Points</label>
+                            <input type="number" min="3" value={selectedLayer.numPoints || 5} onChange={(e) => updateSelectedLayer({ numPoints: Math.max(3, Number(e.target.value)) })} className={fieldCls} /></div>
+                          <div><label className="text-[10px] text-muted-foreground block mb-1">Inner Ratio</label>
+                            <input type="number" step="0.05" min="0.1" max="0.9" value={selectedLayer.innerRadiusRatio || 0.4} onChange={(e) => updateSelectedLayer({ innerRadiusRatio: Number(e.target.value) })} className={fieldCls} /></div>
+                        </>)}
+                        {selectedLayer.type === 'wave' && (
+                          <div><label className="text-[10px] text-muted-foreground block mb-1">Wave Count</label>
+                            <input type="number" min="1" value={selectedLayer.count || 2} onChange={(e) => updateSelectedLayer({ count: Math.max(1, Number(e.target.value)) })} className={fieldCls} /></div>
+                        )}
+                        {selectedLayer.type === 'chakra' && (
+                          <div><label className="text-[10px] text-muted-foreground block mb-1">Spokes</label>
+                            <input type="number" min="4" value={selectedLayer.spokes || 24} onChange={(e) => updateSelectedLayer({ spokes: Math.max(4, Number(e.target.value)) })} className={fieldCls} /></div>
+                        )}
+                        {selectedLayer.type === 'pattern' && (<>
+                          <div><label className="text-[10px] text-muted-foreground block mb-1">Pattern</label>
+                            <select value={selectedLayer.variant || 'dots'} onChange={(e) => updateSelectedLayer({ variant: e.target.value })} className={fieldCls}>
+                              <option value="dots">Dots</option><option value="grid">Grid</option><option value="stripes">Stripes</option></select></div>
+                          <div><label className="text-[10px] text-muted-foreground block mb-1">Spacing</label>
+                            <input type="number" min="8" value={selectedLayer.gap || 32} onChange={(e) => updateSelectedLayer({ gap: Math.max(8, Number(e.target.value)) })} className={fieldCls} /></div>
+                        </>)}
+                        {selectedLayer.type === 'progress_bar' && (
+                          <div><label className="text-[10px] text-muted-foreground block mb-1">Value %</label>
+                            <input type="number" min="0" max="100" value={selectedLayer.value ?? 70} onChange={(e) => updateSelectedLayer({ value: Number(e.target.value) })} className={fieldCls} /></div>
+                        )}
+                        {selectedLayer.type === 'rating' && (<>
+                          <div><label className="text-[10px] text-muted-foreground block mb-1">Filled</label>
+                            <input type="number" min="0" value={selectedLayer.value ?? 5} onChange={(e) => updateSelectedLayer({ value: Number(e.target.value) })} className={fieldCls} /></div>
+                          <div><label className="text-[10px] text-muted-foreground block mb-1">Out of</label>
+                            <input type="number" min="1" value={selectedLayer.max || 5} onChange={(e) => updateSelectedLayer({ max: Math.max(1, Number(e.target.value)) })} className={fieldCls} /></div>
+                        </>)}
+                        {selectedLayer.type === 'angled_block' && (<>
+                          <div><label className="text-[10px] text-muted-foreground block mb-1">Direction</label>
+                            <select value={selectedLayer.direction || 'right'} onChange={(e) => updateSelectedLayer({ direction: e.target.value })} className={fieldCls}>
+                              <option value="right">Right</option><option value="left">Left</option><option value="top">Top</option><option value="bottom">Bottom</option></select></div>
+                          <div><label className="text-[10px] text-muted-foreground block mb-1">Skew</label>
+                            <input type="number" step="0.02" min="0" max="0.5" value={selectedLayer.skew ?? 0.18} onChange={(e) => updateSelectedLayer({ skew: Number(e.target.value) })} className={fieldCls} /></div>
+                        </>)}
+                        {selectedLayer.type === 'icon' && (
+                          <div className="col-span-2"><label className="text-[10px] text-muted-foreground block mb-1">Icon</label>
+                            <select value={selectedLayer.icon || 'star'} onChange={(e) => updateSelectedLayer({ icon: e.target.value })} className={fieldCls}>
+                              {Object.keys(ICON_LIBRARY).map((n) => <option key={n} value={n}>{n}</option>)}</select></div>
+                        )}
+                      </div>
+                      {selectedLayer.type === 'qr_code' && (
+                        <div><label className="text-[10px] text-muted-foreground block mb-1">QR Link / Text</label>
+                          <input type="text" value={selectedLayer.value || ''} onChange={(e) => updateSelectedLayer({ value: e.target.value })} placeholder="https://…" className={fieldCls} /></div>
+                      )}
+                      {(selectedLayer.type === 'ribbon' || selectedLayer.type === 'badge' || selectedLayer.type === 'speech_bubble') && (
+                        <div><label className="text-[10px] text-muted-foreground block mb-1">Text</label>
+                          <input type="text" value={selectedLayer.text || ''} onChange={(e) => updateSelectedLayer({ text: e.target.value })} className={fieldCls} /></div>
+                      )}
+                      {selectedLayer.type === 'checklist' && (
+                        <div><label className="text-[10px] text-muted-foreground block mb-1">Items (one per line)</label>
+                          <textarea rows="4" value={(selectedLayer.items || []).join('\n')} onChange={(e) => updateSelectedLayer({ items: e.target.value.split('\n') })} className={`${fieldCls} resize-none`} /></div>
+                      )}
+                    </div>
+                    <div className="h-[1px] bg-card-border" />
+                  </>
+                )}
 
                 {/* 2. Text Specific Properties */}
                 {selectedLayer.type === 'text' && (
@@ -1439,16 +1624,79 @@ export const PosterEditor = () => {
                               <option value="contain">Contain (entire image)</option>
                             </select>
                           </div>
+
+                          <div>
+                            <label className="text-[10px] text-muted-foreground block mb-1">Frame Shape</label>
+                            <select
+                              value={selectedLayer.frame || 'rounded'}
+                              onChange={(e) => updateSelectedLayer({ frame: e.target.value })}
+                              className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary text-foreground bg-transparent"
+                            >
+                              <option value="rounded">Rounded Rectangle</option>
+                              <option value="circle">Circle / Oval</option>
+                              <option value="arch">Arch (rounded top)</option>
+                              <option value="diagonal">Diagonal Cut</option>
+                              <option value="hexagon">Hexagon</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="text-[10px] text-muted-foreground block mb-1">Photo Filter</label>
+                            <select
+                              value={selectedLayer.filter || ''}
+                              onChange={(e) => updateSelectedLayer({ filter: e.target.value || null })}
+                              className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary text-foreground bg-transparent"
+                            >
+                              <option value="">None</option>
+                              <option value="grayscale">Grayscale</option>
+                              <option value="sepia">Sepia</option>
+                              <option value="blur">Blur</option>
+                              <option value="brighten">Brighten</option>
+                              <option value="contrast">Contrast</option>
+                              <option value="invert">Invert</option>
+                            </select>
+                          </div>
                         </div>
                       ) : (
-                        <div className="border border-dashed border-card-border p-6 rounded-lg text-center bg-card/15">
-                          <ImageIcon className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2 animate-bounce" />
-                          <button
-                            onClick={() => fileInputRef.current.click()}
-                            className="px-3.5 py-2 bg-primary hover:bg-primary-hover text-white rounded text-xs font-bold transition-all shadow"
-                          >
-                            Upload Custom Photo
-                          </button>
+                        <div className="border border-dashed border-card-border p-6 rounded-lg text-center bg-card/15 space-y-4">
+                          <div>
+                            <ImageIcon className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2 animate-bounce" />
+                            <button
+                              onClick={() => fileInputRef.current.click()}
+                              className="px-3.5 py-2 bg-primary hover:bg-primary-hover text-white rounded text-xs font-bold transition-all shadow"
+                            >
+                              Upload Custom Photo
+                            </button>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-px bg-card-border" />
+                            <span className="text-[10px] uppercase text-muted-foreground">or</span>
+                            <div className="flex-1 h-px bg-card-border" />
+                          </div>
+
+                          <div className="space-y-2 text-left">
+                            <label className="text-[10px] text-muted-foreground block">Paste image URL</label>
+                            <div className="flex gap-1.5">
+                              <input
+                                type="text"
+                                value={imageUrlInput}
+                                onChange={(e) => setImageUrlInput(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && applyImageUrl()}
+                                placeholder="https://…/photo.jpg"
+                                className="flex-1 min-w-0 px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary text-foreground bg-transparent"
+                              />
+                              <button
+                                onClick={applyImageUrl}
+                                className="px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded text-xs font-bold transition-all shadow whitespace-nowrap"
+                              >
+                                Add
+                              </button>
+                            </div>
+                            <p className="text-[10px] text-muted-foreground/70 leading-snug">
+                              Paste a direct image link (ending in .jpg/.png/etc). It's fetched through the server so it displays and exports correctly.
+                            </p>
+                          </div>
                         </div>
                       )}
 
@@ -1660,9 +1908,13 @@ export const PosterEditor = () => {
               </div>
             )}
           </div>
+          )}
         </aside>
 
       </div>
+
+      {/* Notifications (this standalone route is outside DashboardLayout) */}
+      <ToastContainer />
     </div>
   );
 };
