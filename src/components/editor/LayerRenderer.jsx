@@ -13,7 +13,7 @@ const SHIELD_PATH = "M50,5 L92,20 V52 C92,74 74,90 50,97 C26,90 8,74 8,52 V20 Z"
 const RIBBON_PATH = "M5,20 H95 V70 L80,58 L95,46 V70 H5 V46 L20,58 L5,70 Z";
 const BUBBLE_PATH = "M10,8 H90 a8,8 0 0 1 8,8 V60 a8,8 0 0 1 -8,8 H40 L24,86 V68 H10 a8,8 0 0 1 -8,-8 V16 a8,8 0 0 1 8,-8 Z";
 
-export const LayerRenderer = ({ layer, isSelected, onSelect, onChange }) => {
+export const LayerRenderer = ({ layer, isSelected, onSelect, onChange, onRequestEdit }) => {
   // Draggable unless explicitly locked or explicitly marked non-editable.
   // (Previously `layer.editable && ...` made layers with an undefined `editable`
   // — e.g. template layers — silently non-draggable.)
@@ -57,9 +57,13 @@ export const LayerRenderer = ({ layer, isSelected, onSelect, onChange }) => {
       updated.radius = Math.round(Math.min(updated.width, updated.height) / 2);
     } else if (layer.type === 'text') {
       const avgScale = (scaleX + scaleY) / 2;
-      // Proportional resize scales the font size, non-proportional wraps
+      // Proportional resize scales the font size, non-proportional wraps.
       if (Math.abs(scaleX - scaleY) < 0.1 && Math.abs(avgScale - 1) > 0.01) {
         updated.fontSize = Math.round((layer.fontSize || 24) * avgScale);
+      } else {
+        // Manually widening/narrowing the box means the user wants a fixed
+        // wrapping width — stop auto-fitting it to the text.
+        updated.autoFit = false;
       }
     }
 
@@ -85,6 +89,14 @@ export const LayerRenderer = ({ layer, isSelected, onSelect, onChange }) => {
       e.cancelBubble = true;
       onSelect(layer.id);
     },
+    // Selecting on drag start guarantees the node is the active selection the
+    // moment a drag begins (so the transformer follows it cleanly).
+    onDragStart: (e) => {
+      e.cancelBubble = true;
+      onSelect(layer.id);
+    },
+    onDblClick: onRequestEdit,
+    onDblTap: onRequestEdit,
     onDragEnd: handleDragEnd,
     onTransformEnd: handleTransformEnd,
   };
@@ -206,6 +218,8 @@ export const LayerRenderer = ({ layer, isSelected, onSelect, onChange }) => {
           fontSize={layer.fontSize || 24}
           fontFamily={layer.fontFamily || 'Poppins'}
           fontStyle={layer.fontStyle || 'normal'}
+          lineHeight={layer.lineHeight || 1}
+          letterSpacing={layer.letterSpacing || 0}
           fill={layer.fill || '#111827'}
           align={layer.align || 'left'}
           verticalAlign="middle"

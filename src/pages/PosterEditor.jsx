@@ -13,8 +13,10 @@ import {
 import { Loader } from '../components/Loader';
 import { ToastContainer } from '../components/Toast';
 import { ICON_LIBRARY } from '../components/editor/IconLayer';
-
-const AVAILABLE_FONTS = ['Poppins', 'Montserrat', 'Inter', 'Outfit', 'Roboto', 'Playfair Display'];
+import {
+  GOOGLE_FONTS, loadGoogleFonts, loadStoredCustomFonts,
+  addCustomFontFromFile, measureText,
+} from '../utils/fonts';
 
 export const PosterEditor = () => {
   const { planId } = useParams(); // planId represents the taskId
@@ -24,6 +26,17 @@ export const PosterEditor = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [task, setTask] = useState(null);
+
+  // Fonts: curated Google fonts + user-uploaded custom fonts. `fontTick` bumps
+  // whenever a font finishes loading so the canvas can redraw with it.
+  const [customFonts, setCustomFonts] = useState([]);
+  const [fontTick, setFontTick] = useState(0);
+  const fontInputRef = useRef(null);
+
+  // Auto-save status
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState(null);
+  const autoSaveSkip = useRef(true);
   
   // Canvas Configuration State
   const [canvasConfig, setCanvasConfig] = useState({
@@ -66,6 +79,12 @@ export const PosterEditor = () => {
 
   // Hidden File Input Trigger
   const fileInputRef = useRef(null);
+
+  // Drag-and-drop from the Elements panel onto the canvas.
+  // `draggedItem` holds the panel item being dragged; `pendingDropPos` carries
+  // the canvas coordinates where the next inserted layer should be centered.
+  const draggedItemRef = useRef(null);
+  const pendingDropPos = useRef(null);
 
   // 1. Fetch task and loading saved designs on mount
   useEffect(() => {
@@ -141,6 +160,41 @@ export const PosterEditor = () => {
     setLayers(initialLayers);
     setHistory([initialLayers]);
     setHistoryIndex(0);
+  };
+
+  // Load curated Google fonts + any persisted custom fonts on mount, then nudge
+  // the canvas to redraw once they are ready.
+  useEffect(() => {
+    loadGoogleFonts();
+    const bump = () => setFontTick((t) => t + 1);
+    if (document.fonts?.ready) document.fonts.ready.then(bump);
+    // Redraw whenever any font finishes loading (Google fonts fetch lazily).
+    document.fonts?.addEventListener?.('loadingdone', bump);
+    loadStoredCustomFonts().then((names) => {
+      if (names.length) {
+        setCustomFonts(names);
+        bump();
+      }
+    });
+    return () => document.fonts?.removeEventListener?.('loadingdone', bump);
+  }, []);
+
+  // Handle a custom font file upload (.ttf/.otf/.woff/.woff2).
+  const handleFontFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (e.target) e.target.value = '';
+    if (!file) return;
+    try {
+      const name = await addCustomFontFromFile(file);
+      setCustomFonts((prev) => (prev.includes(name) ? prev : [...prev, name]));
+      setFontTick((t) => t + 1);
+      if (selectedId && selectedLayer?.type === 'text') {
+        updateSelectedLayer({ fontFamily: name });
+      }
+      addNotification('success', `Font "${name}" added`);
+    } catch {
+      addNotification('error', 'Could not load that font file');
+    }
   };
 
   // 2. Measure Container for Scaling
@@ -287,9 +341,22 @@ export const PosterEditor = () => {
 
   const updateSelectedLayer = (properties) => {
     if (!selectedId) return;
-    const updatedLayers = layers.map((l) => 
-      l.id === selectedId ? { ...l, ...properties } : l
-    );
+    // Manually setting width/height on a text layer means the user wants a fixed
+    // wrapping box, so stop auto-fitting it.
+    const setsBox = properties.width !== undefined || properties.height !== undefined;
+    const updatedLayers = layers.map((l) => {
+      if (l.id !== selectedId) return l;
+      let merged = { ...l, ...properties };
+      if (merged.type === 'text') {
+        if (setsBox) {
+          merged.autoFit = false;
+        } else if (merged.autoFit !== false) {
+          // Re-hug the text whenever its content/typography changes.
+          merged = { ...merged, ...measureText(merged) };
+        }
+      }
+      return merged;
+    });
     updateLayersState(updatedLayers);
   };
 
@@ -301,6 +368,51 @@ export const PosterEditor = () => {
     setShowShapesDropdown(false);
     setShowPremiumDropdown(false);
     setShowElementsDropdown(false);
+  };
+
+  // Single chokepoint for inserting a new layer. When a drag-and-drop is in
+  // progress (pendingDropPos set) the layer is re-centered on the drop point;
+  // otherwise the layer keeps the position its creator chose.
+  const addLayer = (newLayer) => {
+    let layer = newLayer;
+    if (pendingDropPos.current) {
+      const w = layer.width || 100;
+      const h = layer.height || 100;
+      layer = {
+        ...layer,
+        x: Math.round(pendingDropPos.current.x - w / 2),
+        y: Math.round(pendingDropPos.current.y - h / 2),
+      };
+      pendingDropPos.current = null;
+    }
+    updateLayersState([...layers, layer]);
+    handleSelect(layer.id);
+    return layer;
+  };
+
+  // Map a viewport (client) point to canvas coordinates using the live stage
+  // container rect and current zoom scale, clamped to the canvas bounds.
+  const clientToCanvas = (clientX, clientY) => {
+    const stage = stageRef.current;
+    if (!stage) return { x: canvasConfig.width / 2, y: canvasConfig.height / 2 };
+    const rect = stage.container().getBoundingClientRect();
+    const x = (clientX - rect.left) / scale;
+    const y = (clientY - rect.top) / scale;
+    return {
+      x: Math.max(0, Math.min(canvasConfig.width, x)),
+      y: Math.max(0, Math.min(canvasConfig.height, y)),
+    };
+  };
+
+  // Drop handler for the canvas viewport: place the dragged panel item where
+  // the user released, then run its normal insert action.
+  const handleCanvasDrop = (e) => {
+    e.preventDefault();
+    const item = draggedItemRef.current;
+    draggedItemRef.current = null;
+    if (!item || typeof item.onClick !== 'function') return;
+    pendingDropPos.current = clientToCanvas(e.clientX, e.clientY);
+    item.onClick();
   };
 
   const addTextLayer = () => {
@@ -315,14 +427,16 @@ export const PosterEditor = () => {
       fontSize: 32,
       fontFamily: theme.fontFamily || 'Poppins',
       fontStyle: 'normal',
+      lineHeight: 1.2,
+      letterSpacing: 0,
+      autoFit: true,
       fill: theme.accentColor || '#111827',
       align: 'center',
       opacity: 1,
       locked: false,
       editable: true
     };
-    updateLayersState([...layers, newText]);
-    handleSelect(newText.id);
+    addLayer({ ...newText, ...measureText(newText) });
   };
 
   const addHeadingLayer = () => {
@@ -337,14 +451,16 @@ export const PosterEditor = () => {
       fontSize: 60,
       fontFamily: theme.fontFamily || 'Poppins',
       fontStyle: 'bold',
+      lineHeight: 1.2,
+      letterSpacing: 0,
+      autoFit: true,
       fill: theme.accentColor || '#111827',
       align: 'center',
       opacity: 1,
       locked: false,
       editable: true
     };
-    updateLayersState([...layers, newLayer]);
-    handleSelect(newLayer.id);
+    addLayer({ ...newLayer, ...measureText(newLayer) });
   };
 
   const addShapeLayer = () => {
@@ -361,8 +477,7 @@ export const PosterEditor = () => {
       locked: false,
       editable: true
     };
-    updateLayersState([...layers, newShape]);
-    handleSelect(newShape.id);
+    addLayer(newShape);
   };
 
   const addCircleLayer = () => {
@@ -378,8 +493,7 @@ export const PosterEditor = () => {
       locked: false,
       editable: true
     };
-    updateLayersState([...layers, newLayer]);
-    handleSelect(newLayer.id);
+    addLayer(newLayer);
   };
 
   const addEllipseLayer = () => {
@@ -395,8 +509,7 @@ export const PosterEditor = () => {
       locked: false,
       editable: true
     };
-    updateLayersState([...layers, newLayer]);
-    handleSelect(newLayer.id);
+    addLayer(newLayer);
   };
 
   const addLineLayer = () => {
@@ -413,8 +526,7 @@ export const PosterEditor = () => {
       locked: false,
       editable: true
     };
-    updateLayersState([...layers, newLayer]);
-    handleSelect(newLayer.id);
+    addLayer(newLayer);
   };
 
   const addArrowLayer = () => {
@@ -431,8 +543,7 @@ export const PosterEditor = () => {
       locked: false,
       editable: true
     };
-    updateLayersState([...layers, newLayer]);
-    handleSelect(newLayer.id);
+    addLayer(newLayer);
   };
 
   const addStarLayer = () => {
@@ -450,8 +561,7 @@ export const PosterEditor = () => {
       locked: false,
       editable: true
     };
-    updateLayersState([...layers, newLayer]);
-    handleSelect(newLayer.id);
+    addLayer(newLayer);
   };
 
   const addBadgeLayer = () => {
@@ -474,8 +584,7 @@ export const PosterEditor = () => {
       locked: false,
       editable: true
     };
-    updateLayersState([...layers, newLayer]);
-    handleSelect(newLayer.id);
+    addLayer(newLayer);
   };
 
   const addButtonLayer = () => {
@@ -497,8 +606,7 @@ export const PosterEditor = () => {
       locked: false,
       editable: true
     };
-    updateLayersState([...layers, newLayer]);
-    handleSelect(newLayer.id);
+    addLayer(newLayer);
   };
 
   const addIconLayer = () => {
@@ -519,8 +627,7 @@ export const PosterEditor = () => {
       locked: false,
       editable: true
     };
-    updateLayersState([...layers, newLayer]);
-    handleSelect(newLayer.id);
+    addLayer(newLayer);
   };
 
   const addBlobLayer = () => {
@@ -536,8 +643,7 @@ export const PosterEditor = () => {
       locked: false,
       editable: true
     };
-    updateLayersState([...layers, newLayer]);
-    handleSelect(newLayer.id);
+    addLayer(newLayer);
   };
 
   const addWaveLayer = () => {
@@ -553,8 +659,7 @@ export const PosterEditor = () => {
       locked: false,
       editable: true
     };
-    updateLayersState([...layers, newLayer]);
-    handleSelect(newLayer.id);
+    addLayer(newLayer);
   };
 
   const addPolygonLayer = () => {
@@ -571,8 +676,7 @@ export const PosterEditor = () => {
       locked: false,
       editable: true
     };
-    updateLayersState([...layers, newLayer]);
-    handleSelect(newLayer.id);
+    addLayer(newLayer);
   };
 
   const addGradientRectLayer = () => {
@@ -589,8 +693,7 @@ export const PosterEditor = () => {
       locked: false,
       editable: true
     };
-    updateLayersState([...layers, newLayer]);
-    handleSelect(newLayer.id);
+    addLayer(newLayer);
   };
 
   const addPlaceholderLayer = () => {
@@ -612,8 +715,7 @@ export const PosterEditor = () => {
       locked: false,
       editable: true
     };
-    updateLayersState([...layers, newPlaceholder]);
-    handleSelect(newPlaceholder.id);
+    addLayer(newPlaceholder);
   };
 
   // Generic inserter for the new element library. Centers the element on the canvas.
@@ -632,8 +734,7 @@ export const PosterEditor = () => {
       editable: true,
       ...props,
     };
-    updateLayersState([...layers, newLayer]);
-    handleSelect(newLayer.id);
+    addLayer(newLayer);
   };
 
   const ELEMENT_INSERTERS = [
@@ -808,29 +909,40 @@ export const PosterEditor = () => {
   };
 
   // 8. DB Save & PNG Export Handlers
-  const handleSaveDesign = async () => {
-    setSaving(true);
+  // `silent` is used by auto-save: no toasts, separate status indicator.
+  const saveDesign = async ({ silent = false } = {}) => {
+    if (silent) setAutoSaving(true);
+    else setSaving(true);
     try {
-      const designPayload = {
-        canvas: canvasConfig,
-        theme,
-        layers
-      };
-
-      // Call save endpoint
+      const designPayload = { canvas: canvasConfig, theme, layers };
       await api.post('/designs', {
         planId, // planId maps to taskId
         posterDesign: designPayload,
         thumbnail: '' // thumbnail upload is optional
       });
-
-      addNotification('success', 'Poster design saved successfully!');
+      setLastSaved(new Date());
+      if (!silent) addNotification('success', 'Poster design saved successfully!');
     } catch (err) {
-      addNotification('error', 'Failed to save poster design');
+      if (!silent) addNotification('error', 'Failed to save poster design');
     } finally {
-      setSaving(false);
+      if (silent) setAutoSaving(false);
+      else setSaving(false);
     }
   };
+
+  const handleSaveDesign = () => saveDesign();
+
+  // Auto-save: debounce DB writes after any design change. The first run after
+  // load is skipped so simply opening a design doesn't trigger a save.
+  useEffect(() => {
+    if (loading) return;
+    if (autoSaveSkip.current) {
+      autoSaveSkip.current = false;
+      return;
+    }
+    const t = setTimeout(() => saveDesign({ silent: true }), 1800);
+    return () => clearTimeout(t);
+  }, [layers, canvasConfig, theme, loading]);
 
   const handleExportPng = () => {
     if (!stageRef.current) return;
@@ -946,6 +1058,14 @@ export const PosterEditor = () => {
             <span className={`w-1.5 h-1.5 rounded-full ${aiLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/50'}`} />
             <span>AI {aiLive ? 'Live' : 'Off'}</span>
           </div>
+          {/* Auto-save status */}
+          <span className="text-[11px] text-muted-foreground min-w-[64px] text-right">
+            {autoSaving
+              ? 'Saving…'
+              : lastSaved
+                ? `Saved ${lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                : 'Auto-save on'}
+          </span>
           <button
             onClick={handleSaveDesign}
             disabled={saving}
@@ -982,11 +1102,19 @@ export const PosterEditor = () => {
                     <button
                       key={item.label}
                       onClick={item.onClick}
-                      title={`Add ${item.label}`}
-                      className="group flex flex-col items-center justify-center gap-1 aspect-square rounded-xl border border-card-border bg-card/20 hover:bg-primary/10 hover:border-primary/40 transition-all"
+                      draggable
+                      onDragStart={(e) => {
+                        draggedItemRef.current = item;
+                        e.dataTransfer.effectAllowed = 'copy';
+                        // Some browsers require data to be set for the drag to start.
+                        e.dataTransfer.setData('text/plain', item.label);
+                      }}
+                      onDragEnd={() => { draggedItemRef.current = null; }}
+                      title={`Click to add, or drag onto the canvas — ${item.label}`}
+                      className="group flex flex-col items-center justify-center gap-1 aspect-square rounded-xl border border-card-border bg-card/20 hover:bg-primary/10 hover:border-primary/40 transition-all cursor-grab active:cursor-grabbing"
                     >
-                      <span className="text-base leading-none group-hover:scale-110 transition-transform">{item.glyph}</span>
-                      <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight px-0.5">{item.label}</span>
+                      <span className="text-base leading-none group-hover:scale-110 transition-transform pointer-events-none">{item.glyph}</span>
+                      <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight px-0.5 pointer-events-none">{item.label}</span>
                     </button>
                   ))}
                 </div>
@@ -995,9 +1123,15 @@ export const PosterEditor = () => {
           </div>
         </aside>
 
-        {/* Center: Stage Viewport */}
-        <div 
+        {/* Center: Stage Viewport (also the drop target for panel elements) */}
+        <div
           ref={containerRef}
+          onDragOver={(e) => {
+            if (!draggedItemRef.current) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+          }}
+          onDrop={handleCanvasDrop}
           className="flex-1 bg-[#18181B] flex items-center justify-center p-8 overflow-hidden relative"
         >
           <KonvaCanvas
@@ -1011,6 +1145,7 @@ export const PosterEditor = () => {
             }}
             scale={scale}
             canvasConfig={canvasConfig}
+            fontTick={fontTick}
           />
         </div>
 
@@ -1285,11 +1420,97 @@ export const PosterEditor = () => {
                           disabled={selectedLayer.locked}
                           className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary disabled:opacity-50 text-foreground"
                         >
-                          {AVAILABLE_FONTS.map((f) => (
-                            <option key={f} value={f}>{f}</option>
-                          ))}
+                          {customFonts.length > 0 && (
+                            <optgroup label="Custom">
+                              {customFonts.map((f) => (
+                                <option key={f} value={f}>{f}</option>
+                              ))}
+                            </optgroup>
+                          )}
+                          <optgroup label="Google Fonts">
+                            {GOOGLE_FONTS.map((f) => (
+                              <option key={f} value={f}>{f}</option>
+                            ))}
+                          </optgroup>
                         </select>
                       </div>
+                    </div>
+
+                    {/* Custom font upload */}
+                    <div>
+                      <button
+                        onClick={() => fontInputRef.current?.click()}
+                        disabled={selectedLayer.locked}
+                        className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 border border-dashed border-card-border hover:bg-card/25 disabled:opacity-50 rounded text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-all"
+                        title="Upload a .ttf, .otf, .woff or .woff2 font"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Upload Custom Font</span>
+                      </button>
+                      <input
+                        ref={fontInputRef}
+                        type="file"
+                        accept=".ttf,.otf,.woff,.woff2,font/*"
+                        onChange={handleFontFileChange}
+                        className="hidden"
+                      />
+                    </div>
+
+                    {/* Line spacing */}
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="text-[10px] text-muted-foreground">Line Spacing</label>
+                        <span className="text-[10px] font-mono text-muted-foreground">{(selectedLayer.lineHeight ?? 1.2).toFixed(2)}</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="0.8"
+                        max="3"
+                        step="0.05"
+                        value={selectedLayer.lineHeight ?? 1.2}
+                        onChange={(e) => updateSelectedLayer({ lineHeight: Number(e.target.value) })}
+                        disabled={selectedLayer.locked}
+                        className="w-full accent-primary bg-card-border h-1 rounded"
+                      />
+                    </div>
+
+                    {/* Character (letter) spacing */}
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="text-[10px] text-muted-foreground">Character Spacing</label>
+                        <span className="text-[10px] font-mono text-muted-foreground">{(selectedLayer.letterSpacing ?? 0)}px</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="-5"
+                        max="40"
+                        step="0.5"
+                        value={selectedLayer.letterSpacing ?? 0}
+                        onChange={(e) => updateSelectedLayer({ letterSpacing: Number(e.target.value) })}
+                        disabled={selectedLayer.locked}
+                        className="w-full accent-primary bg-card-border h-1 rounded"
+                      />
+                    </div>
+
+                    {/* Auto-fit bounding box to text */}
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 text-[10px] text-muted-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedLayer.autoFit !== false}
+                          onChange={(e) => updateSelectedLayer({ autoFit: e.target.checked })}
+                          disabled={selectedLayer.locked}
+                          className="accent-primary"
+                        />
+                        <span>Fit box to text</span>
+                      </label>
+                      <button
+                        onClick={() => updateSelectedLayer({ autoFit: true })}
+                        disabled={selectedLayer.locked}
+                        className="text-[10px] font-semibold text-primary hover:underline disabled:opacity-50"
+                      >
+                        Fit now
+                      </button>
                     </div>
 
                     <div className="flex items-center gap-3">

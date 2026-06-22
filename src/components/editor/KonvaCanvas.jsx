@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Stage, Layer, Transformer, Group } from 'react-konva';
+import { Stage, Layer, Transformer } from 'react-konva';
 import { LayerRenderer } from './LayerRenderer';
+import { measureText } from '../../utils/fonts';
 
 export const KonvaCanvas = ({
   layers,
@@ -9,14 +10,15 @@ export const KonvaCanvas = ({
   onChangeLayer,
   scale = 1,
   canvasConfig,
-  stageRef: externalStageRef
+  stageRef: externalStageRef,
+  fontTick = 0,
 }) => {
   // Use the parent-provided ref when given (for PNG export / AI live preview),
   // otherwise fall back to a local ref for internal transformer logic.
   const internalStageRef = useRef(null);
   const stageRef = externalStageRef || internalStageRef;
   const transformerRef = useRef(null);
-  
+
   // Double-click inline text editing state
   const [editingId, setEditingId] = useState(null);
   const [editingText, setEditingText] = useState('');
@@ -50,6 +52,13 @@ export const KonvaCanvas = ({
     tr.getLayer().batchDraw();
   }, [selectedId, layers]);
 
+  // Konva caches text metrics on first paint, so when a web/custom font finishes
+  // loading after the canvas has rendered we must force a redraw to pick it up.
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (stage) stage.draw();
+  }, [fontTick]);
+
   // Handle stage deselect click-outside
   const handleStageMouseDown = (e) => {
     // clicked on stage background
@@ -73,7 +82,7 @@ export const KonvaCanvas = ({
 
     setEditingId(layerId);
     setEditingText(layer.text);
-    
+
     // Position text area exactly over the canvas text node
     setTextareaStyle({
       position: 'absolute',
@@ -83,6 +92,8 @@ export const KonvaCanvas = ({
       height: `${textNode.height() * scale}px`,
       fontSize: `${(layer.fontSize || 24) * scale}px`,
       fontFamily: layer.fontFamily || 'Poppins',
+      lineHeight: layer.lineHeight || 1.2,
+      letterSpacing: `${(layer.letterSpacing || 0) * scale}px`,
       color: layer.fill || '#111827',
       textAlign: layer.align || 'center',
       border: '1px solid #6366F1',
@@ -100,10 +111,12 @@ export const KonvaCanvas = ({
     if (editingId) {
       const layer = layers.find((l) => l.id === editingId);
       if (layer) {
-        onChangeLayer({
-          ...layer,
-          text: editingText,
-        });
+        let updated = { ...layer, text: editingText };
+        // Keep the bounding box hugging the text unless the user locked the width.
+        if (updated.autoFit !== false) {
+          updated = { ...updated, ...measureText(updated) };
+        }
+        onChangeLayer(updated);
       }
     }
     setEditingId(null);
@@ -112,7 +125,7 @@ export const KonvaCanvas = ({
   return (
     <div className="relative flex items-center justify-center w-full h-full select-none">
       {/* Target Canvas Container */}
-      <div 
+      <div
         className="shadow-2xl border border-card-border/50"
         style={{
           width: `${width * scale}px`,
@@ -130,20 +143,18 @@ export const KonvaCanvas = ({
           onTouchStart={handleStageMouseDown}
         >
           <Layer>
-            {/* Map layers to Konva nodes */}
+            {/* Map layers to Konva nodes. Each layer is a single draggable node
+                that also owns its click + double-click handlers, so dragging
+                works directly (no wrapper group intercepting the gesture). */}
             {layers.map((layer) => (
-              <Group 
+              <LayerRenderer
                 key={layer.id}
-                onDblClick={() => handleDoubleClick(layer.id)}
-                onDblTap={() => handleDoubleClick(layer.id)}
-              >
-                <LayerRenderer
-                  layer={layer}
-                  isSelected={layer.id === selectedId}
-                  onSelect={onSelect}
-                  onChange={onChangeLayer}
-                />
-              </Group>
+                layer={layer}
+                isSelected={layer.id === selectedId}
+                onSelect={onSelect}
+                onChange={onChangeLayer}
+                onRequestEdit={() => handleDoubleClick(layer.id)}
+              />
             ))}
 
             {/* Selection transformer box */}
