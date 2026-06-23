@@ -8,7 +8,8 @@ import { getDefaultPosterTemplate } from '../utils/designTemplates';
 import { 
   Sparkles, Undo2, Redo2, Download, Save, ArrowLeft, 
   Type, Square, Image as ImageIcon, Plus, Trash2, Copy,
-  AlignLeft, AlignCenter, AlignRight, Check, ArrowUp, ArrowDown
+  AlignLeft, AlignCenter, AlignRight, Check, ArrowUp, ArrowDown,
+  ChevronDown, ChevronRight, ChevronLeft, Shapes
 } from 'lucide-react';
 import { Loader } from '../components/Loader';
 import { ToastContainer } from '../components/Toast';
@@ -61,6 +62,18 @@ export const PosterEditor = () => {
   const [showPremiumDropdown, setShowPremiumDropdown] = useState(false);
   const [showElementsDropdown, setShowElementsDropdown] = useState(false);
 
+  // Canva-style sidebar tabs and drawer states (start collapsed)
+  const [activeTab, setActiveTab] = useState('assets'); // 'assets' | 'text' | 'media'
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const handleTabClick = (tabId) => {
+    if (activeTab === tabId && isDrawerOpen) {
+      setIsDrawerOpen(false);
+    } else {
+      setActiveTab(tabId);
+      setIsDrawerOpen(true);
+    }
+  };
+
   // AI connection code (shown to the user to paste into Claude) + right-panel tab
   const [connectCode, setConnectCode] = useState(null);
   const [rightTab, setRightTab] = useState('properties'); // 'layers' | 'properties'
@@ -72,6 +85,7 @@ export const PosterEditor = () => {
   // Container Measurement State for Responsive Canvas Scale
   const containerRef = useRef(null);
   const stageRef = useRef(null);
+  const rightSidebarRef = useRef(null);
   const [scale, setScale] = useState(0.5);
 
   // Image-by-URL input (alongside local upload)
@@ -359,6 +373,104 @@ export const PosterEditor = () => {
     });
     updateLayersState(updatedLayers);
   };
+
+  // 4b. Global Keyboard Shortcuts Listener
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      const activeEl = document.activeElement;
+      if (
+        activeEl &&
+        (activeEl.tagName === 'INPUT' ||
+          activeEl.tagName === 'TEXTAREA' ||
+          activeEl.isContentEditable)
+      ) {
+        return;
+      }
+
+      const isMod = e.ctrlKey || e.metaKey;
+      if (isMod && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+        return;
+      }
+      if (isMod && e.key.toLowerCase() === 'y') {
+        e.preventDefault();
+        handleRedo();
+        return;
+      }
+
+      if (!selectedId || !selectedLayer) return;
+
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        deleteLayer();
+        return;
+      }
+
+      const isArrow = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key);
+      if (isArrow) {
+        e.preventDefault();
+        const step = e.shiftKey ? 10 : 1;
+        const rotateStep = e.shiftKey ? 15 : 5;
+
+        if (e.altKey) {
+          let diff = 0;
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') diff = -rotateStep;
+          if (e.key === 'ArrowRight' || e.key === 'ArrowDown') diff = rotateStep;
+
+          if (diff !== 0) {
+            const currentRot = selectedLayer.rotation || 0;
+            let nextRot = (currentRot + diff) % 360;
+            if (nextRot < 0) nextRot += 360;
+            updateSelectedLayer({ rotation: nextRot });
+          }
+          return;
+        }
+
+        let dx = 0;
+        let dy = 0;
+        if (e.key === 'ArrowLeft') dx = -step;
+        if (e.key === 'ArrowRight') dx = step;
+        if (e.key === 'ArrowUp') dy = -step;
+        if (e.key === 'ArrowDown') dy = step;
+
+        if (dx !== 0 || dy !== 0) {
+          updateSelectedLayer({
+            x: selectedLayer.x + dx,
+            y: selectedLayer.y + dy,
+          });
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectedId, selectedLayer, historyIndex, history]);
+
+  // 4c. Global Click-Outside Deselection Listener
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (!selectedId) return;
+
+      const clickInCanvas = containerRef.current && containerRef.current.contains(e.target);
+      const clickInProperties = rightSidebarRef.current && rightSidebarRef.current.contains(e.target);
+
+      if (!clickInCanvas && !clickInProperties) {
+        handleSelect(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [selectedId]);
 
   // 5. Canvas Layer Insertion Actions
   const handleSelect = (id) => {
@@ -1087,18 +1199,119 @@ export const PosterEditor = () => {
       {/* 2. Main Workspace Layout */}
       <div className="flex-1 flex overflow-hidden min-h-0">
         
-        {/* Left Side: Elements / Insert Rail */}
-        <aside className="w-60 border-r border-card-border bg-card flex flex-col overflow-hidden">
-          <div className="px-4 py-3.5 border-b border-card-border flex items-center gap-2">
-            <Plus className="w-4 h-4 text-emerald-400" />
-            <h3 className="text-xs uppercase font-extrabold tracking-wider text-foreground">Elements</h3>
-          </div>
-          <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5">
-            {INSERT_SECTIONS.map((section) => (
-              <div key={section.title}>
-                <p className="text-[10px] uppercase font-bold text-muted-foreground/70 tracking-wider px-1 mb-2">{section.title}</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {section.items.map((item) => (
+        {/* Left Side: Canva-style Sidebar */}
+        {/* Left Rail (Tabs) */}
+        <div className="w-20 border-r border-card-border bg-sidebar-bg flex flex-col items-center py-4 gap-2 flex-shrink-0">
+          {[
+            { id: 'assets', label: 'Design Assets', icon: Shapes },
+            { id: 'text', label: 'Text', icon: Type },
+            { id: 'media', label: 'Media', icon: ImageIcon }
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id && isDrawerOpen;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => handleTabClick(tab.id)}
+                className={`w-16 h-16 rounded-xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
+                  isActive 
+                    ? 'bg-primary/15 text-primary border border-primary/20 shadow-sm' 
+                    : 'text-muted-foreground hover:text-foreground hover:bg-card/45'
+                }`}
+              >
+                <Icon className="w-5 h-5" />
+                <span className="text-[9px] font-semibold tracking-wide text-center leading-tight px-1">{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Drawer Panel */}
+        {isDrawerOpen && (
+          <aside className="w-64 border-r border-card-border bg-card flex flex-col overflow-hidden relative z-10 animate-in slide-in-from-left duration-200">
+            {/* Drawer Header */}
+            <div className="px-4 py-3.5 border-b border-card-border flex items-center justify-between">
+              <h3 className="text-xs uppercase font-extrabold tracking-wider text-foreground">
+                {activeTab === 'assets' ? 'Design Assets' : activeTab === 'text' ? 'Text' : 'Media'}
+              </h3>
+              <button
+                onClick={() => setIsDrawerOpen(false)}
+                className="p-1.5 hover:bg-card-border/30 rounded-lg text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Drawer Content */}
+            <div className="flex-1 overflow-y-auto px-3.5 py-4 space-y-5">
+              {activeTab === 'assets' && (
+                <>
+                  {INSERT_SECTIONS.filter(s => ['Shapes', 'Decor', 'Smart'].includes(s.title)).map((section) => (
+                    <div key={section.title}>
+                      <p className="text-[10px] uppercase font-bold text-muted-foreground/75 tracking-wider px-1 mb-2">{section.title}</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        {section.items.map((item) => (
+                          <button
+                            key={item.label}
+                            onClick={item.onClick}
+                            draggable
+                            onDragStart={(e) => {
+                              draggedItemRef.current = item;
+                              e.dataTransfer.effectAllowed = 'copy';
+                              e.dataTransfer.setData('text/plain', item.label);
+                            }}
+                            onDragEnd={() => { draggedItemRef.current = null; }}
+                            title={`Click to add, or drag onto the canvas — ${item.label}`}
+                            className="group flex flex-col items-center justify-center gap-1 aspect-square rounded-lg border border-card-border bg-card/20 hover:bg-primary/10 hover:border-primary/40 transition-all cursor-grab active:cursor-grabbing hover:scale-[1.02] active:scale-[0.98]"
+                          >
+                            <span className="text-3xl leading-none text-foreground/90 group-hover:text-primary group-hover:scale-110 transition-all duration-200 pointer-events-none">{item.glyph}</span>
+                            <span className="text-[10px] text-muted-foreground group-hover:text-foreground text-center leading-tight px-0.5 pointer-events-none select-none">{item.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {activeTab === 'text' && (
+                <div className="space-y-3.5">
+                  <p className="text-[10px] uppercase font-bold text-muted-foreground/75 tracking-wider px-1">Text Options</p>
+                  {INSERT_SECTIONS.find(s => s.title === 'Text')?.items.map((item) => {
+                    const previewCls = {
+                      'Heading': 'text-base font-extrabold tracking-tight',
+                      'Body': 'text-xs font-normal text-muted-foreground',
+                      'Curved': 'text-xs font-bold tracking-wider uppercase'
+                    }[item.label] || 'text-sm';
+
+                    return (
+                      <button
+                        key={item.label}
+                        onClick={item.onClick}
+                        draggable
+                        onDragStart={(e) => {
+                          draggedItemRef.current = item;
+                          e.dataTransfer.effectAllowed = 'copy';
+                          e.dataTransfer.setData('text/plain', item.label);
+                        }}
+                        onDragEnd={() => { draggedItemRef.current = null; }}
+                        title={`Click to add, or drag onto the canvas — ${item.label}`}
+                        className="w-full text-left px-4 py-3 rounded-lg border border-card-border bg-card/25 hover:bg-primary/10 hover:border-primary/30 transition-all cursor-grab active:cursor-grabbing hover:scale-[1.01]"
+                      >
+                        <div className={`${previewCls} text-foreground mb-0.5`}>
+                          {item.label === 'Heading' ? 'Add a heading' : item.label === 'Body' ? 'Add body text' : 'Add curved text'}
+                        </div>
+                        <span className="text-[9px] text-muted-foreground/70 font-mono">Glyph: {item.glyph}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {activeTab === 'media' && (
+                <div className="space-y-3.5">
+                  <p className="text-[10px] uppercase font-bold text-muted-foreground/75 tracking-wider px-1">Media Assets</p>
+                  {INSERT_SECTIONS.find(s => s.title === 'Media')?.items.map((item) => (
                     <button
                       key={item.label}
                       onClick={item.onClick}
@@ -1106,25 +1319,24 @@ export const PosterEditor = () => {
                       onDragStart={(e) => {
                         draggedItemRef.current = item;
                         e.dataTransfer.effectAllowed = 'copy';
-                        // Some browsers require data to be set for the drag to start.
                         e.dataTransfer.setData('text/plain', item.label);
                       }}
                       onDragEnd={() => { draggedItemRef.current = null; }}
                       title={`Click to add, or drag onto the canvas — ${item.label}`}
-                      className="group flex flex-col items-center justify-center gap-1 aspect-square rounded-xl border border-card-border bg-card/20 hover:bg-primary/10 hover:border-primary/40 transition-all cursor-grab active:cursor-grabbing"
+                      className="group flex flex-col items-center justify-center gap-2 p-5 rounded-xl border border-card-border bg-card/20 hover:bg-primary/10 hover:border-primary/40 transition-all cursor-grab active:cursor-grabbing hover:scale-[1.02] active:scale-[0.98]"
                     >
-                      <span className="text-base leading-none group-hover:scale-110 transition-transform pointer-events-none">{item.glyph}</span>
-                      <span className="text-[9px] text-muted-foreground group-hover:text-foreground text-center leading-tight px-0.5 pointer-events-none">{item.label}</span>
+                      <span className="text-3xl pointer-events-none group-hover:scale-110 transition-transform">{item.glyph}</span>
+                      <span className="text-xs text-muted-foreground group-hover:text-foreground text-center font-medium leading-tight pointer-events-none">{item.label}</span>
                     </button>
                   ))}
                 </div>
-              </div>
-            ))}
-          </div>
-        </aside>
+              )}
+            </div>
+          </aside>
+        )}
 
         {/* Center: Stage Viewport (also the drop target for panel elements) */}
-        <div
+         <div
           ref={containerRef}
           onDragOver={(e) => {
             if (!draggedItemRef.current) return;
@@ -1132,6 +1344,11 @@ export const PosterEditor = () => {
             e.dataTransfer.dropEffect = 'copy';
           }}
           onDrop={handleCanvasDrop}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              handleSelect(null);
+            }
+          }}
           className="flex-1 bg-[#18181B] flex items-center justify-center p-8 overflow-hidden relative"
         >
           <KonvaCanvas
@@ -1143,6 +1360,8 @@ export const PosterEditor = () => {
               const updated = layers.map((l) => (l.id === updatedLayer.id ? updatedLayer : l));
               updateLayersState(updated);
             }}
+            onDeleteLayer={deleteLayer}
+            onDuplicateLayer={duplicateLayer}
             scale={scale}
             canvasConfig={canvasConfig}
             fontTick={fontTick}
@@ -1150,7 +1369,7 @@ export const PosterEditor = () => {
         </div>
 
         {/* Right Side: Property Sidebar Panel */}
-        <aside className="w-80 border-l border-card-border bg-card flex flex-col overflow-hidden">
+        <aside ref={rightSidebarRef} className="w-80 border-l border-card-border bg-card flex flex-col overflow-hidden">
           {/* Tabs: Layers / Properties */}
           <div className="flex border-b border-card-border flex-shrink-0">
             {['layers', 'properties'].map((tab) => (
@@ -1172,7 +1391,7 @@ export const PosterEditor = () => {
           {rightTab === 'layers' && (
             <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
               {layers.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center pt-8">No layers yet — add from the Elements panel.</p>
+                <p className="text-xs text-muted-foreground text-center pt-8">No layers yet — add from the Design Assets panel.</p>
               ) : (
                 [...layers].reverse().map((l) => (
                   <button
