@@ -9,7 +9,7 @@ import {
   Sparkles, Undo2, Redo2, Download, Save, ArrowLeft, 
   Type, Square, Image as ImageIcon, Plus, Trash2, Copy,
   AlignLeft, AlignCenter, AlignRight, Check, ArrowUp, ArrowDown,
-  ChevronDown, ChevronRight, ChevronLeft, Shapes
+  ChevronDown, ChevronRight, ChevronLeft, Shapes, Minus
 } from 'lucide-react';
 import { Loader } from '../components/Loader';
 import { ToastContainer } from '../components/Toast';
@@ -87,6 +87,13 @@ export const PosterEditor = () => {
   const stageRef = useRef(null);
   const rightSidebarRef = useRef(null);
   const [scale, setScale] = useState(0.5);
+
+  // Workspace Panning & Navigation State
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [isSpacePressed, setIsSpacePressed] = useState(false);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const panStartRef = useRef({ x: 0, y: 0 });
 
   // Image-by-URL input (alongside local upload)
   const [imageUrlInput, setImageUrlInput] = useState('');
@@ -212,24 +219,23 @@ export const PosterEditor = () => {
   };
 
   // 2. Measure Container for Scaling
-  useEffect(() => {
-    const handleResize = () => {
-      if (containerRef.current) {
-        const { clientWidth, clientHeight } = containerRef.current;
-        // Keep 40px spacing margins
-        const scaleX = (clientWidth - 40) / canvasConfig.width;
-        const scaleY = (clientHeight - 40) / canvasConfig.height;
-        setScale(Math.min(0.9, scaleX, scaleY));
-      }
-    };
+  const autoFitScale = () => {
+    if (containerRef.current) {
+      const { clientWidth, clientHeight } = containerRef.current;
+      const scaleX = (clientWidth - 40) / canvasConfig.width;
+      const scaleY = (clientHeight - 40) / canvasConfig.height;
+      setScale(Math.min(0.9, scaleX, scaleY));
+      setPan({ x: 0, y: 0 });
+    }
+  };
 
+  useEffect(() => {
     if (!loading) {
-      // Small timeout to allow DOM to mount fully
-      const timer = setTimeout(handleResize, 100);
-      window.addEventListener('resize', handleResize);
+      const timer = setTimeout(autoFitScale, 100);
+      window.addEventListener('resize', autoFitScale);
       return () => {
         clearTimeout(timer);
-        window.removeEventListener('resize', handleResize);
+        window.removeEventListener('resize', autoFitScale);
       };
     }
   }, [loading, canvasConfig.width, canvasConfig.height]);
@@ -471,6 +477,123 @@ export const PosterEditor = () => {
       document.removeEventListener('mousedown', handleOutsideClick);
     };
   }, [selectedId]);
+
+  // 4d. Workspace Panning and Navigation Listeners
+  // Spacebar tracking for Panning mode
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.code === 'Space') {
+        const activeEl = document.activeElement;
+        if (
+          activeEl &&
+          (activeEl.tagName === 'INPUT' ||
+            activeEl.tagName === 'TEXTAREA' ||
+            activeEl.isContentEditable)
+        ) {
+          return;
+        }
+        e.preventDefault();
+        setIsSpacePressed(true);
+      }
+    };
+
+    const handleKeyUp = (e) => {
+      if (e.code === 'Space') {
+        setIsSpacePressed(false);
+      }
+    };
+
+    const handleBlur = () => {
+      setIsSpacePressed(false);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
+
+  const handlePanMouseDown = (e) => {
+    if (e.button !== 0 && e.button !== 1) return;
+    e.preventDefault();
+    setIsPanning(true);
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+    panStartRef.current = { ...pan };
+  };
+
+  const handleWorkspaceMouseDown = (e) => {
+    // Middle click pans anywhere
+    if (e.button === 1) {
+      e.preventDefault();
+      setIsPanning(true);
+      dragStartRef.current = { x: e.clientX, y: e.clientY };
+      panStartRef.current = { ...pan };
+      return;
+    }
+    // Left click on empty workspace background pans
+    if (e.button === 0 && e.target === containerRef.current) {
+      e.preventDefault();
+      setIsPanning(true);
+      dragStartRef.current = { x: e.clientX, y: e.clientY };
+      panStartRef.current = { ...pan };
+    }
+  };
+
+  useEffect(() => {
+    if (!isPanning) return;
+
+    const handleMouseMove = (e) => {
+      const dx = e.clientX - dragStartRef.current.x;
+      const dy = e.clientY - dragStartRef.current.y;
+      setPan({
+        x: panStartRef.current.x + dx,
+        y: panStartRef.current.y + dy,
+      });
+    };
+
+    const handleMouseUp = () => {
+      setIsPanning(false);
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isPanning]);
+
+  // Non-passive wheel event listener for trackpad pinch-to-zoom and panning
+  useEffect(() => {
+    if (loading) return;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e) => {
+      e.preventDefault();
+      if (e.ctrlKey) {
+        // Zoom
+        const zoomFactor = 0.02;
+        const direction = e.deltaY < 0 ? 1 : -1;
+        setScale((prev) => Math.max(0.1, Math.min(2.0, prev + direction * zoomFactor)));
+      } else {
+        // Pan/scroll
+        setPan((prev) => ({
+          x: prev.x - e.deltaX,
+          y: prev.y - e.deltaY,
+        }));
+      }
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      container.removeEventListener('wheel', handleWheel);
+    };
+  }, [loading]);
 
   // 5. Canvas Layer Insertion Actions
   const handleSelect = (id) => {
@@ -1336,7 +1459,7 @@ export const PosterEditor = () => {
         )}
 
         {/* Center: Stage Viewport (also the drop target for panel elements) */}
-         <div
+        <div
           ref={containerRef}
           onDragOver={(e) => {
             if (!draggedItemRef.current) return;
@@ -1348,24 +1471,73 @@ export const PosterEditor = () => {
             if (e.target === e.currentTarget) {
               handleSelect(null);
             }
+            handleWorkspaceMouseDown(e);
           }}
-          className="flex-1 bg-[#18181B] flex items-center justify-center p-8 overflow-hidden relative"
+          className={`flex-1 bg-[#18181B] flex items-center justify-center p-8 overflow-hidden relative select-none ${
+            isPanning ? 'cursor-grabbing' : isSpacePressed ? 'cursor-grab' : 'cursor-default'
+          }`}
         >
-          <KonvaCanvas
-            stageRef={stageRef}
-            layers={layers}
-            selectedId={selectedId}
-            onSelect={handleSelect}
-            onChangeLayer={(updatedLayer) => {
-              const updated = layers.map((l) => (l.id === updatedLayer.id ? updatedLayer : l));
-              updateLayersState(updated);
+          {/* Panning event interceptor */}
+          {(isSpacePressed || isPanning) && (
+            <div
+              className="absolute inset-0 z-20"
+              style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
+              onMouseDown={handlePanMouseDown}
+            />
+          )}
+
+          <div
+            style={{
+              transform: `translate(${pan.x}px, ${pan.y}px)`,
+              transition: isPanning ? 'none' : 'transform 0.1s ease-out',
             }}
-            onDeleteLayer={deleteLayer}
-            onDuplicateLayer={duplicateLayer}
-            scale={scale}
-            canvasConfig={canvasConfig}
-            fontTick={fontTick}
-          />
+            className="relative"
+          >
+            <KonvaCanvas
+              stageRef={stageRef}
+              layers={layers}
+              selectedId={selectedId}
+              onSelect={handleSelect}
+              onChangeLayer={(updatedLayer) => {
+                const updated = layers.map((l) => (l.id === updatedLayer.id ? updatedLayer : l));
+                updateLayersState(updated);
+              }}
+              onDeleteLayer={deleteLayer}
+              onDuplicateLayer={duplicateLayer}
+              scale={scale}
+              canvasConfig={canvasConfig}
+              fontTick={fontTick}
+            />
+          </div>
+
+          {/* Zoom Controls Widget */}
+          <div className="absolute bottom-4 right-4 bg-zinc-900/90 border border-zinc-800 rounded-lg p-1 flex items-center gap-1.5 shadow-lg backdrop-blur-md z-30 select-none">
+            <button
+              onClick={() => setScale((prev) => Math.max(0.1, prev - 0.05))}
+              className="p-1 hover:bg-zinc-800 rounded text-muted-foreground hover:text-white transition-colors cursor-pointer flex items-center justify-center"
+              title="Zoom Out"
+            >
+              <Minus className="w-3.5 h-3.5" />
+            </button>
+            <span className="text-[10px] font-mono font-bold text-zinc-300 w-10 text-center">
+              {Math.round(scale * 100)}%
+            </span>
+            <button
+              onClick={() => setScale((prev) => Math.min(2.0, prev + 0.05))}
+              className="p-1 hover:bg-zinc-800 rounded text-muted-foreground hover:text-white transition-colors cursor-pointer flex items-center justify-center"
+              title="Zoom In"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+            <div className="w-[1px] h-3 bg-zinc-800" />
+            <button
+              onClick={autoFitScale}
+              className="px-2 py-0.5 hover:bg-zinc-800 rounded text-[9px] font-bold text-zinc-300 hover:text-white transition-colors cursor-pointer"
+              title="Fit to screen"
+            >
+              FIT
+            </button>
+          </div>
         </div>
 
         {/* Right Side: Property Sidebar Panel */}
@@ -1526,6 +1698,87 @@ export const PosterEditor = () => {
                       >
                         <ArrowDown className="w-3.5 h-3.5" />
                         <span>Send Backward</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Canvas Alignment */}
+                  <div>
+                    <label className="text-[10px] text-muted-foreground block mb-1">Align to Canvas</label>
+                    <div className="grid grid-cols-3 gap-1.5 text-center">
+                      <button
+                        onClick={() => {
+                          if (!selectedLayer) return;
+                          updateSelectedLayer({ x: 0 });
+                        }}
+                        disabled={selectedLayer.locked}
+                        className="py-1 px-2 border border-card-border hover:bg-card/25 rounded text-[10px] font-semibold text-foreground transition-all disabled:opacity-30 cursor-pointer"
+                        title="Align Left"
+                      >
+                        Left
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!selectedLayer) return;
+                          updateSelectedLayer({
+                            x: Math.round((canvasConfig.width - (selectedLayer.width || 100)) / 2)
+                          });
+                        }}
+                        disabled={selectedLayer.locked}
+                        className="py-1 px-2 border border-card-border hover:bg-card/25 rounded text-[10px] font-semibold text-foreground transition-all disabled:opacity-30 cursor-pointer"
+                        title="Align Horizontal Center"
+                      >
+                        Center
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!selectedLayer) return;
+                          updateSelectedLayer({
+                            x: Math.round(canvasConfig.width - (selectedLayer.width || 100))
+                          });
+                        }}
+                        disabled={selectedLayer.locked}
+                        className="py-1 px-2 border border-card-border hover:bg-card/25 rounded text-[10px] font-semibold text-foreground transition-all disabled:opacity-30 cursor-pointer"
+                        title="Align Right"
+                      >
+                        Right
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!selectedLayer) return;
+                          updateSelectedLayer({ y: 0 });
+                        }}
+                        disabled={selectedLayer.locked}
+                        className="py-1 px-2 border border-card-border hover:bg-card/25 rounded text-[10px] font-semibold text-foreground transition-all disabled:opacity-30 cursor-pointer"
+                        title="Align Top"
+                      >
+                        Top
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!selectedLayer) return;
+                          updateSelectedLayer({
+                            y: Math.round((canvasConfig.height - (selectedLayer.height || 100)) / 2)
+                          });
+                        }}
+                        disabled={selectedLayer.locked}
+                        className="py-1 px-2 border border-card-border hover:bg-card/25 rounded text-[10px] font-semibold text-foreground transition-all disabled:opacity-30 cursor-pointer"
+                        title="Align Vertical Center"
+                      >
+                        Middle
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!selectedLayer) return;
+                          updateSelectedLayer({
+                            y: Math.round(canvasConfig.height - (selectedLayer.height || 100))
+                          });
+                        }}
+                        disabled={selectedLayer.locked}
+                        className="py-1 px-2 border border-card-border hover:bg-card/25 rounded text-[10px] font-semibold text-foreground transition-all disabled:opacity-30 cursor-pointer"
+                        title="Align Bottom"
+                      >
+                        Bottom
                       </button>
                     </div>
                   </div>
