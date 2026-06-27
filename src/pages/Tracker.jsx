@@ -205,7 +205,11 @@ export const Tracker = () => {
 
                 {/* Actions Right side */}
                 <div className="flex flex-wrap items-center gap-2.5 self-end md:self-start md:border-l border-card-border/40 md:pl-4 flex-shrink-0 h-full">
-                  {['post', 'poster', 'instagram_post', 'facebook_post'].includes(task.contentType?.toLowerCase()?.trim()) && (
+                  {(task.posterDesign || (() => {
+                    const type = task.contentType?.toLowerCase() || '';
+                    const isVideo = type.includes('reel') || type.includes('video') || type.includes('tiktok') || type.includes('short');
+                    return !isVideo;
+                  })()) && (
                     <button
                       onClick={() => navigate(`/editor/${task._id || task.id}`)}
                       disabled={isSkipped}

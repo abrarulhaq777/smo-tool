@@ -9,6 +9,8 @@ import { DashboardLayout } from './components/DashboardLayout';
 import { Dashboard } from './pages/Dashboard';
 import { Projects } from './pages/Projects';
 import { Competitors } from './pages/Competitors';
+import { CompetitorReport } from './pages/CompetitorReport';
+import { CompetitorCompare } from './pages/CompetitorCompare';
 import { Trends } from './pages/Trends';
 import { Strategy } from './pages/Strategy';
 import { Tracker } from './pages/Tracker';
@@ -45,6 +47,8 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/competitors" element={<Competitors />} />
+          <Route path="/competitors/:id/report" element={<CompetitorReport />} />
+          <Route path="/competitors/compare" element={<CompetitorCompare />} />
           <Route path="/trends" element={<Trends />} />
           <Route path="/strategy" element={<Strategy />} />
           <Route path="/tracker" element={<Tracker />} />

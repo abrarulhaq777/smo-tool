@@ -20,7 +20,7 @@ const getStoredActiveProject = () => {
     if (!item) return null;
     const parsed = JSON.parse(item);
     // Discard stale Prisma/UUID IDs from before the MongoDB migration
-    if (!isValidMongoId(parsed?.id)) {
+    if (!isValidMongoId(parsed?.id || parsed?._id)) {
       localStorage.removeItem('trendbite_active_project');
       return null;
     }

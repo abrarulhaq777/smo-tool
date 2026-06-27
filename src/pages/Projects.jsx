@@ -101,8 +101,8 @@ export const Projects = () => {
       });
 
       const updated = res.data.data;
-      setProjects(projects.map((p) => (p.id === editingId ? updated : p)));
-      if (activeProject?.id === editingId) {
+      setProjects(projects.map((p) => ((p._id || p.id) === editingId ? updated : p)));
+      if (((activeProject?._id || activeProject?.id) === editingId)) {
         setActiveProject(updated);
       }
 
@@ -131,9 +131,9 @@ export const Projects = () => {
 
     try {
       await api.delete(`/projects/${id}`);
-      const updated = projects.filter((p) => p.id !== id);
+      const updated = projects.filter((p) => (p._id || p.id) !== id);
       setProjects(updated);
-      if (activeProject?.id === id) {
+      if (((activeProject?._id || activeProject?.id) === id)) {
         setActiveProject(updated.length > 0 ? updated[0] : null);
       }
       addNotification('success', `Wiped "${name}" project database.`);
@@ -143,7 +143,7 @@ export const Projects = () => {
   };
 
   const handleEditInit = (proj) => {
-    setEditingId(proj.id);
+    setEditingId(proj._id || proj.id);
     setBusinessName(proj.businessName);
     setCategory(proj.category);
     setIndustry(proj.industry || '');
@@ -332,8 +332,8 @@ export const Projects = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((proj) => (
             <div
-              key={proj.id}
-              className={`glass-panel p-5 rounded-xl border transition-all flex flex-col justify-between ${activeProject?.id === proj.id
+              key={proj._id || proj.id}
+              className={`glass-panel p-5 rounded-xl border transition-all flex flex-col justify-between ${(activeProject?._id || activeProject?.id) === (proj._id || proj.id)
                 ? 'border-primary shadow-lg shadow-primary/5 bg-primary/5'
                 : 'border-card-border hover:border-muted'
                 }`}
@@ -342,7 +342,7 @@ export const Projects = () => {
                 {/* Active Checkmark Header */}
                 <div className="flex items-start justify-between gap-3 mb-3">
                   <h3 className="font-bold text-foreground text-lg leading-tight truncate">{proj.businessName}</h3>
-                  {activeProject?.id === proj.id ? (
+                  {(activeProject?._id || activeProject?.id) === (proj._id || proj.id) ? (
                     <span className="flex items-center gap-1 text-[10px] uppercase font-bold text-primary px-2 py-0.5 rounded-full border border-primary/20 bg-primary/5">
                       <Check className="w-3 h-3" />
                       Active
@@ -396,7 +396,7 @@ export const Projects = () => {
                   >
                     <Edit className="w-4 h-4" />
                   </button>
-                  <p>{proj.id}</p>
+                  <p className="text-[10px] text-muted-foreground font-mono">{proj._id || proj.id}</p>
                   <button
                     onClick={() => handleDelete(proj._id, proj.businessName)}
                     className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"

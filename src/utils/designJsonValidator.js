@@ -36,7 +36,7 @@ export function validateDesignJson(designJson) {
       }
 
       const id = layer.id || `${layer.type}_${Date.now()}_${index}`;
-      
+
       // Standard base layer properties. Spread the original layer first so that
       // component-specific props (items, skew, direction, variant, spokes, value,
       // frame, checkColor, …) are preserved; then normalize the core fields.

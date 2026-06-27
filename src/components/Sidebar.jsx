@@ -102,10 +102,10 @@ export const Sidebar = () => {
                 <div className="p-1">
                   {projects.map((proj) => (
                     <button
-                      key={proj.id}
+                      key={proj._id || proj.id}
                       onClick={() => handleProjectSelect(proj)}
                       className={`w-full text-left p-2 rounded-md text-xs flex flex-col hover:bg-card/60 transition-colors ${
-                        activeProject?.id === proj.id ? 'bg-primary/10 border-l-2 border-primary' : ''
+                        (activeProject?._id || activeProject?.id) === (proj._id || proj.id) ? 'bg-primary/10 border-l-2 border-primary' : ''
                       }`}
                     >
                       <span className="font-medium text-foreground truncate">{proj.businessName}</span>

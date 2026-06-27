@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import api from '../services/api';
-import { 
+import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   BarChart, Bar, Legend
 } from 'recharts';
-import { 
+import {
   BarChart3, Plus, ExternalLink, ThumbsUp, MessageSquare, Globe, Video, Link
 } from 'lucide-react';
 
@@ -31,7 +31,7 @@ export const Analytics = () => {
     if (!activeProject) return;
     setLoading(true);
     try {
-      const res = await api.get(`/analytics/${activeProject.id}`);
+      const res = await api.get(`/analytics/${activeProject._id}`);
       setPosts(res.data.data);
     } catch {
       addNotification('error', 'Failed to retrieve analytics history');
@@ -55,7 +55,7 @@ export const Analytics = () => {
     setSubmitting(true);
     try {
       await api.post('/analytics', {
-        projectId: activeProject.id,
+        projectId: activeProject._id,
         platform,
         postLink,
         reach: reach || 0,
@@ -69,7 +69,7 @@ export const Analytics = () => {
 
       addNotification('success', 'Logged post analytics record.');
       setShowLogForm(false);
-      
+
       // Reset form
       setPostLink('');
       setReach('');
@@ -129,7 +129,7 @@ export const Analytics = () => {
   });
 
   const barChartData = Object.values(platformSummary).filter((p) => p.reach > 0 || p.engagement > 0);
-  const lineChartData = Object.values(timelineMap).sort((a, b) => 
+  const lineChartData = Object.values(timelineMap).sort((a, b) =>
     new Date(a.date).getTime() - new Date(b.date).getTime()
   );
 
@@ -167,7 +167,7 @@ export const Analytics = () => {
       {showLogForm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md transition-all duration-300">
           <div className="glass-panel-glow w-full max-w-2xl rounded-2xl border border-card-border bg-dropdown-bg p-6 shadow-2xl relative overflow-hidden space-y-4">
-            
+
             {/* Glow accent */}
             <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary via-secondary to-accent" />
 
@@ -341,14 +341,14 @@ export const Analytics = () => {
                     <AreaChart data={lineChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                       <defs>
                         <linearGradient id="reachGlow" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25}/>
-                          <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                          <stop offset="5%" stopColor="#6366f1" stopOpacity={0.25} />
+                          <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                       <XAxis dataKey="date" stroke="#71717a" fontSize={10} tickLine={false} />
                       <YAxis stroke="#71717a" fontSize={10} tickLine={false} />
-                      <Tooltip 
+                      <Tooltip
                         contentStyle={{ backgroundColor: '#18181b', borderColor: 'rgba(255,255,255,0.08)' }}
                         itemStyle={{ fontSize: 11 }}
                       />
@@ -371,7 +371,7 @@ export const Analytics = () => {
                       <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                       <XAxis dataKey="name" stroke="#71717a" fontSize={10} tickLine={false} />
                       <YAxis stroke="#71717a" fontSize={10} tickLine={false} />
-                      <Tooltip 
+                      <Tooltip
                         contentStyle={{ backgroundColor: '#18181b', borderColor: 'rgba(255,255,255,0.08)' }}
                         itemStyle={{ fontSize: 11 }}
                       />

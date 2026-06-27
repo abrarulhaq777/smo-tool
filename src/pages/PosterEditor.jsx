@@ -5,8 +5,8 @@ import api from '../services/api';
 import { KonvaCanvas } from '../components/editor/KonvaCanvas';
 import { validateDesignJson } from '../utils/designJsonValidator';
 import { getDefaultPosterTemplate } from '../utils/designTemplates';
-import { 
-  Sparkles, Undo2, Redo2, Download, Save, ArrowLeft, 
+import {
+  Sparkles, Undo2, Redo2, Download, Save, ArrowLeft,
   Type, Square, Image as ImageIcon, Plus, Trash2, Copy,
   AlignLeft, AlignCenter, AlignRight, Check, ArrowUp, ArrowDown,
   ChevronDown, ChevronRight, ChevronLeft, Shapes, Minus
@@ -38,7 +38,7 @@ export const PosterEditor = () => {
   const [autoSaving, setAutoSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
   const autoSaveSkip = useRef(true);
-  
+
   // Canvas Configuration State
   const [canvasConfig, setCanvasConfig] = useState({
     width: 1080,
@@ -127,6 +127,7 @@ export const PosterEditor = () => {
 
         // Fetch task details to get goal, initial AI design, and project categories
         const taskRes = await api.get(`/tasks/single/${planId}`);
+        console.log(taskRes);
         associatedTask = taskRes.data.data;
         setTask(associatedTask);
 
@@ -134,6 +135,7 @@ export const PosterEditor = () => {
           // Load customized saved design
           const validated = validateDesignJson(loadedDesign.posterDesign);
           if (validated) {
+            console.log(validated);
             setCanvasConfig(validated.canvas);
             setTheme(validated.theme);
             initializeLayers(validated.layers);
@@ -167,7 +169,7 @@ export const PosterEditor = () => {
 
   // Load static design template as fallback
   const loadFallback = (associatedTask) => {
-    const category = activeProject?.category || 'Business';
+    const category = associatedTask?.projectId?.category || activeProject?.category || 'Business';
     const goal = associatedTask?.goal || 'Special Offer';
     const fallbackTemplate = getDefaultPosterTemplate(category, goal);
     setCanvasConfig(fallbackTemplate.canvas);
@@ -281,7 +283,7 @@ export const PosterEditor = () => {
       planId,
       design: designRef.current,
       preview: capturePreview(),
-    }).catch(() => {});
+    }).catch(() => { });
   };
 
   // Apply an AI-pushed design to the canvas.
@@ -1181,7 +1183,7 @@ export const PosterEditor = () => {
 
   const handleExportPng = () => {
     if (!stageRef.current) return;
-    
+
     // Clear selection temporarily to hide transformer nodes on PNG
     const currentSelect = selectedId;
     setSelectedId(null);
@@ -1191,7 +1193,7 @@ export const PosterEditor = () => {
       try {
         const stage = stageRef.current;
         const dataUrl = stage.toDataURL({ pixelRatio: 2 });
-        
+
         const link = document.createElement('a');
         link.download = `${task?.goal?.replace(/\s+/g, '_') || 'poster'}_day_${task?.dayIndex || 1}.png`;
         link.href = dataUrl;
@@ -1231,7 +1233,7 @@ export const PosterEditor = () => {
             <ArrowLeft className="w-4 h-4" />
             <span>Back to Tasks</span>
           </button>
-          
+
           <div className="h-5 w-[1px] bg-card-border" />
 
           <div>
@@ -1284,11 +1286,10 @@ export const PosterEditor = () => {
           {/* AI live channel status (MCP) */}
           <div
             title={aiLive ? 'AI live channel connected — generate from Claude via MCP' : 'AI live channel offline'}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
-              aiLive
-                ? 'border-emerald-400/40 text-emerald-300 bg-emerald-500/10'
-                : 'border-card-border text-muted-foreground bg-card/30'
-            }`}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${aiLive
+              ? 'border-emerald-400/40 text-emerald-300 bg-emerald-500/10'
+              : 'border-card-border text-muted-foreground bg-card/30'
+              }`}
           >
             <span className={`w-1.5 h-1.5 rounded-full ${aiLive ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground/50'}`} />
             <span>AI {aiLive ? 'Live' : 'Off'}</span>
@@ -1321,7 +1322,7 @@ export const PosterEditor = () => {
 
       {/* 2. Main Workspace Layout */}
       <div className="flex-1 flex overflow-hidden min-h-0">
-        
+
         {/* Left Side: Canva-style Sidebar */}
         {/* Left Rail (Tabs) */}
         <div className="w-20 border-r border-card-border bg-sidebar-bg flex flex-col items-center py-4 gap-2 flex-shrink-0">
@@ -1336,11 +1337,10 @@ export const PosterEditor = () => {
               <button
                 key={tab.id}
                 onClick={() => handleTabClick(tab.id)}
-                className={`w-16 h-16 rounded-xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
-                  isActive 
-                    ? 'bg-primary/15 text-primary border border-primary/20 shadow-sm' 
-                    : 'text-muted-foreground hover:text-foreground hover:bg-card/45'
-                }`}
+                className={`w-16 h-16 rounded-xl flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${isActive
+                  ? 'bg-primary/15 text-primary border border-primary/20 shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-card/45'
+                  }`}
               >
                 <Icon className="w-5 h-5" />
                 <span className="text-[9px] font-semibold tracking-wide text-center leading-tight px-1">{tab.label}</span>
@@ -1473,9 +1473,8 @@ export const PosterEditor = () => {
             }
             handleWorkspaceMouseDown(e);
           }}
-          className={`flex-1 bg-[#18181B] flex items-center justify-center p-8 overflow-hidden relative select-none ${
-            isPanning ? 'cursor-grabbing' : isSpacePressed ? 'cursor-grab' : 'cursor-default'
-          }`}
+          className={`flex-1 bg-[#18181B] flex items-center justify-center p-8 overflow-hidden relative select-none ${isPanning ? 'cursor-grabbing' : isSpacePressed ? 'cursor-grab' : 'cursor-default'
+            }`}
         >
           {/* Panning event interceptor */}
           {(isSpacePressed || isPanning) && (
@@ -1548,11 +1547,10 @@ export const PosterEditor = () => {
               <button
                 key={tab}
                 onClick={() => setRightTab(tab)}
-                className={`flex-1 py-3 text-[11px] uppercase font-bold tracking-wider transition-colors ${
-                  rightTab === tab
-                    ? 'text-foreground border-b-2 border-primary bg-card/20'
-                    : 'text-muted-foreground hover:text-foreground border-b-2 border-transparent'
-                }`}
+                className={`flex-1 py-3 text-[11px] uppercase font-bold tracking-wider transition-colors ${rightTab === tab
+                  ? 'text-foreground border-b-2 border-primary bg-card/20'
+                  : 'text-muted-foreground hover:text-foreground border-b-2 border-transparent'
+                  }`}
               >
                 {tab === 'layers' ? `Layers${layers.length ? ` · ${layers.length}` : ''}` : 'Properties'}
               </button>
@@ -1569,11 +1567,10 @@ export const PosterEditor = () => {
                   <button
                     key={l.id}
                     onClick={() => handleSelect(l.id)}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs transition-all border text-left ${
-                      l.id === selectedId
-                        ? 'bg-primary/15 border-primary/30 font-semibold text-white'
-                        : 'border-transparent hover:bg-card/20 text-muted-foreground hover:text-foreground'
-                    }`}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs transition-all border text-left ${l.id === selectedId
+                      ? 'bg-primary/15 border-primary/30 font-semibold text-white'
+                      : 'border-transparent hover:bg-card/20 text-muted-foreground hover:text-foreground'
+                      }`}
                   >
                     <div className="flex items-center gap-2 truncate">
                       {l.type === 'text' && <Type className="w-3.5 h-3.5 flex-shrink-0" />}
@@ -1594,555 +1591,837 @@ export const PosterEditor = () => {
 
           {/* Properties tab */}
           {rightTab === 'properties' && (
-          <div className="flex-1 overflow-y-auto p-5 space-y-6">
-            {!selectedLayer ? (
-              <div className="text-center py-20">
-                <Sparkles className="w-8 h-8 text-muted-foreground/30 mx-auto mb-3 animate-pulse" />
-                <p className="text-xs text-muted-foreground max-w-[180px] mx-auto leading-relaxed">
-                  Click on an element on the canvas to configure colors, sizing, text, and photos.
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-6">
-                
-                {/* 1. General Layout properties (x, y, w, h, rotation, ordering) */}
-                <div className="space-y-4">
-                  <h4 className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Layout & Ordering</h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[10px] text-muted-foreground block mb-1">X Coordinate</label>
-                      <input
-                        type="number"
-                        value={selectedLayer.x}
-                        onChange={(e) => updateSelectedLayer({ x: Number(e.target.value) })}
-                        disabled={selectedLayer.locked}
-                        className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary disabled:opacity-50 font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-muted-foreground block mb-1">Y Coordinate</label>
-                      <input
-                        type="number"
-                        value={selectedLayer.y}
-                        onChange={(e) => updateSelectedLayer({ y: Number(e.target.value) })}
-                        disabled={selectedLayer.locked}
-                        className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary disabled:opacity-50 font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-muted-foreground block mb-1">Width (px)</label>
-                      <input
-                        type="number"
-                        value={selectedLayer.width || 100}
-                        onChange={(e) => updateSelectedLayer({ width: Number(e.target.value) })}
-                        disabled={selectedLayer.locked}
-                        className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary disabled:opacity-50 font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] text-muted-foreground block mb-1">Height (px)</label>
-                      <input
-                        type="number"
-                        value={selectedLayer.height || 100}
-                        onChange={(e) => updateSelectedLayer({ height: Number(e.target.value) })}
-                        disabled={selectedLayer.locked}
-                        className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary disabled:opacity-50 font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Rotation Slider */}
-                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="text-[10px] text-muted-foreground">Rotation</label>
-                      <span className="text-[10px] font-mono text-muted-foreground">{selectedLayer.rotation || 0}°</span>
-                    </div>
-                    <div className="flex gap-2 items-center">
-                      <input
-                        type="range"
-                        min="0"
-                        max="360"
-                        value={selectedLayer.rotation || 0}
-                        onChange={(e) => updateSelectedLayer({ rotation: Number(e.target.value) })}
-                        disabled={selectedLayer.locked}
-                        className="flex-1 accent-primary bg-card-border h-1 rounded"
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        max="360"
-                        value={selectedLayer.rotation || 0}
-                        onChange={(e) => updateSelectedLayer({ rotation: Number(e.target.value) })}
-                        disabled={selectedLayer.locked}
-                        className="w-14 px-1.5 py-1 bg-card/25 border border-card-border rounded text-[11px] text-center font-mono focus:outline-none text-foreground"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Bring Forward / Send Backward actions */}
-                  <div>
-                    <label className="text-[10px] text-muted-foreground block mb-1">Layer Ordering</label>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={bringForward}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 border border-card-border hover:bg-card/25 rounded text-xs font-semibold text-foreground transition-all"
-                        title="Bring Layer Forward"
-                      >
-                        <ArrowUp className="w-3.5 h-3.5" />
-                        <span>Bring Forward</span>
-                      </button>
-                      <button
-                        onClick={sendBackward}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 border border-card-border hover:bg-card/25 rounded text-xs font-semibold text-foreground transition-all"
-                        title="Send Layer Backward"
-                      >
-                        <ArrowDown className="w-3.5 h-3.5" />
-                        <span>Send Backward</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Canvas Alignment */}
-                  <div>
-                    <label className="text-[10px] text-muted-foreground block mb-1">Align to Canvas</label>
-                    <div className="grid grid-cols-3 gap-1.5 text-center">
-                      <button
-                        onClick={() => {
-                          if (!selectedLayer) return;
-                          updateSelectedLayer({ x: 0 });
-                        }}
-                        disabled={selectedLayer.locked}
-                        className="py-1 px-2 border border-card-border hover:bg-card/25 rounded text-[10px] font-semibold text-foreground transition-all disabled:opacity-30 cursor-pointer"
-                        title="Align Left"
-                      >
-                        Left
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (!selectedLayer) return;
-                          updateSelectedLayer({
-                            x: Math.round((canvasConfig.width - (selectedLayer.width || 100)) / 2)
-                          });
-                        }}
-                        disabled={selectedLayer.locked}
-                        className="py-1 px-2 border border-card-border hover:bg-card/25 rounded text-[10px] font-semibold text-foreground transition-all disabled:opacity-30 cursor-pointer"
-                        title="Align Horizontal Center"
-                      >
-                        Center
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (!selectedLayer) return;
-                          updateSelectedLayer({
-                            x: Math.round(canvasConfig.width - (selectedLayer.width || 100))
-                          });
-                        }}
-                        disabled={selectedLayer.locked}
-                        className="py-1 px-2 border border-card-border hover:bg-card/25 rounded text-[10px] font-semibold text-foreground transition-all disabled:opacity-30 cursor-pointer"
-                        title="Align Right"
-                      >
-                        Right
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (!selectedLayer) return;
-                          updateSelectedLayer({ y: 0 });
-                        }}
-                        disabled={selectedLayer.locked}
-                        className="py-1 px-2 border border-card-border hover:bg-card/25 rounded text-[10px] font-semibold text-foreground transition-all disabled:opacity-30 cursor-pointer"
-                        title="Align Top"
-                      >
-                        Top
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (!selectedLayer) return;
-                          updateSelectedLayer({
-                            y: Math.round((canvasConfig.height - (selectedLayer.height || 100)) / 2)
-                          });
-                        }}
-                        disabled={selectedLayer.locked}
-                        className="py-1 px-2 border border-card-border hover:bg-card/25 rounded text-[10px] font-semibold text-foreground transition-all disabled:opacity-30 cursor-pointer"
-                        title="Align Vertical Center"
-                      >
-                        Middle
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (!selectedLayer) return;
-                          updateSelectedLayer({
-                            y: Math.round(canvasConfig.height - (selectedLayer.height || 100))
-                          });
-                        }}
-                        disabled={selectedLayer.locked}
-                        className="py-1 px-2 border border-card-border hover:bg-card/25 rounded text-[10px] font-semibold text-foreground transition-all disabled:opacity-30 cursor-pointer"
-                        title="Align Bottom"
-                      >
-                        Bottom
-                      </button>
-                    </div>
-                  </div>
+            <div className="flex-1 overflow-y-auto p-5 space-y-6">
+              {!selectedLayer ? (
+                <div className="text-center py-20">
+                  <Sparkles className="w-8 h-8 text-muted-foreground/30 mx-auto mb-3 animate-pulse" />
+                  <p className="text-xs text-muted-foreground max-w-[180px] mx-auto leading-relaxed">
+                    Click on an element on the canvas to configure colors, sizing, text, and photos.
+                  </p>
                 </div>
+              ) : (
+                <div className="space-y-6">
 
-                <div className="h-[1px] bg-card-border" />
-
-                {/* 1b. Element-specific options */}
-                {['polygon', 'star', 'wave', 'chakra', 'pattern', 'progress_bar', 'rating', 'angled_block', 'qr_code', 'icon', 'checklist', 'ribbon', 'badge', 'speech_bubble'].includes(selectedLayer.type) && (
-                  <>
-                    <div className="space-y-3">
-                      <h4 className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Element Options</h4>
-                      <div className="grid grid-cols-2 gap-3">
-                        {selectedLayer.type === 'polygon' && (
-                          <div><label className="text-[10px] text-muted-foreground block mb-1">Sides</label>
-                            <input type="number" min="3" value={selectedLayer.sides || 3} onChange={(e) => updateSelectedLayer({ sides: Math.max(3, Number(e.target.value)) })} className={fieldCls} /></div>
-                        )}
-                        {selectedLayer.type === 'star' && (<>
-                          <div><label className="text-[10px] text-muted-foreground block mb-1">Points</label>
-                            <input type="number" min="3" value={selectedLayer.numPoints || 5} onChange={(e) => updateSelectedLayer({ numPoints: Math.max(3, Number(e.target.value)) })} className={fieldCls} /></div>
-                          <div><label className="text-[10px] text-muted-foreground block mb-1">Inner Ratio</label>
-                            <input type="number" step="0.05" min="0.1" max="0.9" value={selectedLayer.innerRadiusRatio || 0.4} onChange={(e) => updateSelectedLayer({ innerRadiusRatio: Number(e.target.value) })} className={fieldCls} /></div>
-                        </>)}
-                        {selectedLayer.type === 'wave' && (
-                          <div><label className="text-[10px] text-muted-foreground block mb-1">Wave Count</label>
-                            <input type="number" min="1" value={selectedLayer.count || 2} onChange={(e) => updateSelectedLayer({ count: Math.max(1, Number(e.target.value)) })} className={fieldCls} /></div>
-                        )}
-                        {selectedLayer.type === 'chakra' && (
-                          <div><label className="text-[10px] text-muted-foreground block mb-1">Spokes</label>
-                            <input type="number" min="4" value={selectedLayer.spokes || 24} onChange={(e) => updateSelectedLayer({ spokes: Math.max(4, Number(e.target.value)) })} className={fieldCls} /></div>
-                        )}
-                        {selectedLayer.type === 'pattern' && (<>
-                          <div><label className="text-[10px] text-muted-foreground block mb-1">Pattern</label>
-                            <select value={selectedLayer.variant || 'dots'} onChange={(e) => updateSelectedLayer({ variant: e.target.value })} className={fieldCls}>
-                              <option value="dots">Dots</option><option value="grid">Grid</option><option value="stripes">Stripes</option></select></div>
-                          <div><label className="text-[10px] text-muted-foreground block mb-1">Spacing</label>
-                            <input type="number" min="8" value={selectedLayer.gap || 32} onChange={(e) => updateSelectedLayer({ gap: Math.max(8, Number(e.target.value)) })} className={fieldCls} /></div>
-                        </>)}
-                        {selectedLayer.type === 'progress_bar' && (
-                          <div><label className="text-[10px] text-muted-foreground block mb-1">Value %</label>
-                            <input type="number" min="0" max="100" value={selectedLayer.value ?? 70} onChange={(e) => updateSelectedLayer({ value: Number(e.target.value) })} className={fieldCls} /></div>
-                        )}
-                        {selectedLayer.type === 'rating' && (<>
-                          <div><label className="text-[10px] text-muted-foreground block mb-1">Filled</label>
-                            <input type="number" min="0" value={selectedLayer.value ?? 5} onChange={(e) => updateSelectedLayer({ value: Number(e.target.value) })} className={fieldCls} /></div>
-                          <div><label className="text-[10px] text-muted-foreground block mb-1">Out of</label>
-                            <input type="number" min="1" value={selectedLayer.max || 5} onChange={(e) => updateSelectedLayer({ max: Math.max(1, Number(e.target.value)) })} className={fieldCls} /></div>
-                        </>)}
-                        {selectedLayer.type === 'angled_block' && (<>
-                          <div><label className="text-[10px] text-muted-foreground block mb-1">Direction</label>
-                            <select value={selectedLayer.direction || 'right'} onChange={(e) => updateSelectedLayer({ direction: e.target.value })} className={fieldCls}>
-                              <option value="right">Right</option><option value="left">Left</option><option value="top">Top</option><option value="bottom">Bottom</option></select></div>
-                          <div><label className="text-[10px] text-muted-foreground block mb-1">Skew</label>
-                            <input type="number" step="0.02" min="0" max="0.5" value={selectedLayer.skew ?? 0.18} onChange={(e) => updateSelectedLayer({ skew: Number(e.target.value) })} className={fieldCls} /></div>
-                        </>)}
-                        {selectedLayer.type === 'icon' && (
-                          <div className="col-span-2"><label className="text-[10px] text-muted-foreground block mb-1">Icon</label>
-                            <select value={selectedLayer.icon || 'star'} onChange={(e) => updateSelectedLayer({ icon: e.target.value })} className={fieldCls}>
-                              {Object.keys(ICON_LIBRARY).map((n) => <option key={n} value={n}>{n}</option>)}</select></div>
-                        )}
-                      </div>
-                      {selectedLayer.type === 'qr_code' && (
-                        <div><label className="text-[10px] text-muted-foreground block mb-1">QR Link / Text</label>
-                          <input type="text" value={selectedLayer.value || ''} onChange={(e) => updateSelectedLayer({ value: e.target.value })} placeholder="https://…" className={fieldCls} /></div>
-                      )}
-                      {(selectedLayer.type === 'ribbon' || selectedLayer.type === 'badge' || selectedLayer.type === 'speech_bubble') && (
-                        <div><label className="text-[10px] text-muted-foreground block mb-1">Text</label>
-                          <input type="text" value={selectedLayer.text || ''} onChange={(e) => updateSelectedLayer({ text: e.target.value })} className={fieldCls} /></div>
-                      )}
-                      {selectedLayer.type === 'checklist' && (
-                        <div><label className="text-[10px] text-muted-foreground block mb-1">Items (one per line)</label>
-                          <textarea rows="4" value={(selectedLayer.items || []).join('\n')} onChange={(e) => updateSelectedLayer({ items: e.target.value.split('\n') })} className={`${fieldCls} resize-none`} /></div>
-                      )}
-                    </div>
-                    <div className="h-[1px] bg-card-border" />
-                  </>
-                )}
-
-                {/* 2. Text Specific Properties */}
-                {selectedLayer.type === 'text' && (
+                  {/* 1. General Layout properties (x, y, w, h, rotation, ordering) */}
                   <div className="space-y-4">
-                    <h4 className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Typography</h4>
-                    
-                    <div>
-                      <label className="text-[10px] text-muted-foreground block mb-1">Text Value</label>
-                      <textarea
-                        value={selectedLayer.text}
-                        onChange={(e) => updateSelectedLayer({ text: e.target.value })}
-                        disabled={selectedLayer.locked}
-                        rows={3}
-                        className="w-full px-2.5 py-2 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary disabled:opacity-50 leading-relaxed resize-none text-foreground"
-                      />
-                    </div>
-
+                    <h4 className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Layout & Ordering</h4>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-[10px] text-muted-foreground block mb-1">Font Size (px)</label>
+                        <label className="text-[10px] text-muted-foreground block mb-1">X Coordinate</label>
                         <input
                           type="number"
-                          value={selectedLayer.fontSize}
-                          onChange={(e) => updateSelectedLayer({ fontSize: Number(e.target.value) })}
+                          value={selectedLayer.x}
+                          onChange={(e) => updateSelectedLayer({ x: Number(e.target.value) })}
                           disabled={selectedLayer.locked}
-                          className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary disabled:opacity-50 font-mono text-foreground"
+                          className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary disabled:opacity-50 font-mono"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] text-muted-foreground block mb-1">Font Family</label>
-                        <select
-                          value={selectedLayer.fontFamily}
-                          onChange={(e) => updateSelectedLayer({ fontFamily: e.target.value })}
+                        <label className="text-[10px] text-muted-foreground block mb-1">Y Coordinate</label>
+                        <input
+                          type="number"
+                          value={selectedLayer.y}
+                          onChange={(e) => updateSelectedLayer({ y: Number(e.target.value) })}
                           disabled={selectedLayer.locked}
-                          className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary disabled:opacity-50 text-foreground"
-                        >
-                          {customFonts.length > 0 && (
-                            <optgroup label="Custom">
-                              {customFonts.map((f) => (
-                                <option key={f} value={f}>{f}</option>
-                              ))}
-                            </optgroup>
-                          )}
-                          <optgroup label="Google Fonts">
-                            {GOOGLE_FONTS.map((f) => (
-                              <option key={f} value={f}>{f}</option>
-                            ))}
-                          </optgroup>
-                        </select>
+                          className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary disabled:opacity-50 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground block mb-1">Width (px)</label>
+                        <input
+                          type="number"
+                          value={selectedLayer.width || 100}
+                          onChange={(e) => updateSelectedLayer({ width: Number(e.target.value) })}
+                          disabled={selectedLayer.locked}
+                          className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary disabled:opacity-50 font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground block mb-1">Height (px)</label>
+                        <input
+                          type="number"
+                          value={selectedLayer.height || 100}
+                          onChange={(e) => updateSelectedLayer({ height: Number(e.target.value) })}
+                          disabled={selectedLayer.locked}
+                          className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary disabled:opacity-50 font-mono"
+                        />
                       </div>
                     </div>
 
-                    {/* Custom font upload */}
-                    <div>
-                      <button
-                        onClick={() => fontInputRef.current?.click()}
-                        disabled={selectedLayer.locked}
-                        className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 border border-dashed border-card-border hover:bg-card/25 disabled:opacity-50 rounded text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-all"
-                        title="Upload a .ttf, .otf, .woff or .woff2 font"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Upload Custom Font</span>
-                      </button>
-                      <input
-                        ref={fontInputRef}
-                        type="file"
-                        accept=".ttf,.otf,.woff,.woff2,font/*"
-                        onChange={handleFontFileChange}
-                        className="hidden"
-                      />
-                    </div>
-
-                    {/* Line spacing */}
+                    {/* Rotation Slider */}
                     <div>
                       <div className="flex justify-between items-center mb-1">
-                        <label className="text-[10px] text-muted-foreground">Line Spacing</label>
-                        <span className="text-[10px] font-mono text-muted-foreground">{(selectedLayer.lineHeight ?? 1.2).toFixed(2)}</span>
+                        <label className="text-[10px] text-muted-foreground">Rotation</label>
+                        <span className="text-[10px] font-mono text-muted-foreground">{selectedLayer.rotation || 0}°</span>
                       </div>
-                      <input
-                        type="range"
-                        min="0.8"
-                        max="3"
-                        step="0.05"
-                        value={selectedLayer.lineHeight ?? 1.2}
-                        onChange={(e) => updateSelectedLayer({ lineHeight: Number(e.target.value) })}
-                        disabled={selectedLayer.locked}
-                        className="w-full accent-primary bg-card-border h-1 rounded"
-                      />
-                    </div>
-
-                    {/* Character (letter) spacing */}
-                    <div>
-                      <div className="flex justify-between items-center mb-1">
-                        <label className="text-[10px] text-muted-foreground">Character Spacing</label>
-                        <span className="text-[10px] font-mono text-muted-foreground">{(selectedLayer.letterSpacing ?? 0)}px</span>
-                      </div>
-                      <input
-                        type="range"
-                        min="-5"
-                        max="40"
-                        step="0.5"
-                        value={selectedLayer.letterSpacing ?? 0}
-                        onChange={(e) => updateSelectedLayer({ letterSpacing: Number(e.target.value) })}
-                        disabled={selectedLayer.locked}
-                        className="w-full accent-primary bg-card-border h-1 rounded"
-                      />
-                    </div>
-
-                    {/* Auto-fit bounding box to text */}
-                    <div className="flex items-center justify-between">
-                      <label className="flex items-center gap-2 text-[10px] text-muted-foreground cursor-pointer">
+                      <div className="flex gap-2 items-center">
                         <input
-                          type="checkbox"
-                          checked={selectedLayer.autoFit !== false}
-                          onChange={(e) => updateSelectedLayer({ autoFit: e.target.checked })}
+                          type="range"
+                          min="0"
+                          max="360"
+                          value={selectedLayer.rotation || 0}
+                          onChange={(e) => updateSelectedLayer({ rotation: Number(e.target.value) })}
                           disabled={selectedLayer.locked}
-                          className="accent-primary"
+                          className="flex-1 accent-primary bg-card-border h-1 rounded"
                         />
-                        <span>Fit box to text</span>
-                      </label>
-                      <button
-                        onClick={() => updateSelectedLayer({ autoFit: true })}
-                        disabled={selectedLayer.locked}
-                        className="text-[10px] font-semibold text-primary hover:underline disabled:opacity-50"
-                      >
-                        Fit now
-                      </button>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <div>
-                        <label className="text-[10px] text-muted-foreground block mb-1">Font Weight</label>
-                        <select
-                          value={selectedLayer.fontStyle || 'normal'}
-                          onChange={(e) => updateSelectedLayer({ fontStyle: e.target.value })}
-                          disabled={selectedLayer.locked}
-                          className="px-2 py-1 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary text-foreground"
-                        >
-                          <option value="normal">Normal</option>
-                          <option value="bold">Bold</option>
-                          <option value="italic">Italic</option>
-                          <option value="bold italic">Bold Italic</option>
-                        </select>
-                      </div>
-
-                      <div className="flex-1">
-                        <label className="text-[10px] text-muted-foreground block mb-1">Text Color</label>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="color"
-                            value={selectedLayer.fill || '#111827'}
-                            onChange={(e) => updateSelectedLayer({ fill: e.target.value })}
-                            disabled={selectedLayer.locked}
-                            className="w-8 h-8 rounded border border-card-border cursor-pointer bg-transparent"
-                          />
-                          <span className="text-[11px] font-mono text-muted-foreground">{selectedLayer.fill || '#111827'}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] text-muted-foreground block mb-1">Alignment</label>
-                      <div className="flex gap-1.5 bg-card-border/10 p-1 rounded-lg w-max">
-                        <button
-                          onClick={() => updateSelectedLayer({ align: 'left' })}
-                          disabled={selectedLayer.locked}
-                          className={`p-1.5 rounded transition-all ${selectedLayer.align === 'left' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-card/20'}`}
-                        >
-                          <AlignLeft className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => updateSelectedLayer({ align: 'center' })}
-                          disabled={selectedLayer.locked}
-                          className={`p-1.5 rounded transition-all ${selectedLayer.align === 'center' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-card/20'}`}
-                        >
-                          <AlignCenter className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => updateSelectedLayer({ align: 'right' })}
-                          disabled={selectedLayer.locked}
-                          className={`p-1.5 rounded transition-all ${selectedLayer.align === 'right' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-card/20'}`}
-                        >
-                          <AlignRight className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* 3. Shape Specific Properties (Unified Styling Panel) */}
-                {['rect', 'circle', 'ellipse', 'star', 'polygon', 'blob', 'wave', 'badge', 'button', 'icon_placeholder', 'line', 'arrow', 'gradient_rect'].includes(selectedLayer.type) && (
-                  <div className="space-y-4">
-                    <h4 className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Fill & Border</h4>
-                    
-                    {/* Standard Color Fill */}
-                    {selectedLayer.type !== 'line' && selectedLayer.type !== 'arrow' && selectedLayer.type !== 'gradient_rect' && (
-                      <div>
-                        <label className="text-[10px] text-muted-foreground block mb-1">Fill Color</label>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="color"
-                            value={selectedLayer.fill || '#EA580C'}
-                            onChange={(e) => updateSelectedLayer({ fill: e.target.value })}
-                            disabled={selectedLayer.locked}
-                            className="w-8 h-8 rounded border border-card-border cursor-pointer bg-transparent"
-                          />
-                          <span className="text-[11px] font-mono text-muted-foreground uppercase">{selectedLayer.fill || '#EA580C'}</span>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Gradient Background Options */}
-                    {selectedLayer.type === 'gradient_rect' && (
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="text-[10px] text-muted-foreground block mb-1">Color Stop 1</label>
-                            <input
-                              type="color"
-                              value={Array.isArray(selectedLayer.fill) ? selectedLayer.fill[0] : (selectedLayer.fill || '#EA580C')}
-                              onChange={(e) => {
-                                const currentFill = Array.isArray(selectedLayer.fill) ? [...selectedLayer.fill] : [selectedLayer.fill || '#EA580C', '#FDBA74'];
-                                currentFill[0] = e.target.value;
-                                updateSelectedLayer({ fill: currentFill });
-                              }}
-                              disabled={selectedLayer.locked}
-                              className="w-8 h-8 rounded border border-card-border cursor-pointer bg-transparent"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] text-muted-foreground block mb-1">Color Stop 2</label>
-                            <input
-                              type="color"
-                              value={Array.isArray(selectedLayer.fill) ? (selectedLayer.fill[1] || selectedLayer.fill[0]) : '#FDBA74'}
-                              onChange={(e) => {
-                                const currentFill = Array.isArray(selectedLayer.fill) ? [...selectedLayer.fill] : [selectedLayer.fill || '#EA580C', '#FDBA74'];
-                                currentFill[1] = e.target.value;
-                                updateSelectedLayer({ fill: currentFill });
-                              }}
-                              disabled={selectedLayer.locked}
-                              className="w-8 h-8 rounded border border-card-border cursor-pointer bg-transparent"
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-muted-foreground block mb-1">Gradient Direction</label>
-                          <select
-                            value={selectedLayer.gradientDirection || 'vertical'}
-                            onChange={(e) => updateSelectedLayer({ gradientDirection: e.target.value })}
-                            disabled={selectedLayer.locked}
-                            className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary text-foreground bg-transparent"
-                          >
-                            <option value="vertical">Vertical</option>
-                            <option value="horizontal">Horizontal</option>
-                            <option value="diagonal">Diagonal</option>
-                          </select>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Stroke options */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="text-[10px] text-muted-foreground block mb-1">Border Color</label>
-                        <input
-                          type="color"
-                          value={selectedLayer.stroke || '#1E293B'}
-                          onChange={(e) => updateSelectedLayer({ stroke: e.target.value })}
-                          disabled={selectedLayer.locked}
-                          className="w-8 h-8 rounded border border-card-border cursor-pointer bg-transparent"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground block mb-1">Border Width</label>
                         <input
                           type="number"
                           min="0"
-                          value={selectedLayer.strokeWidth || 0}
-                          onChange={(e) => updateSelectedLayer({ strokeWidth: Number(e.target.value) })}
+                          max="360"
+                          value={selectedLayer.rotation || 0}
+                          onChange={(e) => updateSelectedLayer({ rotation: Number(e.target.value) })}
                           disabled={selectedLayer.locked}
-                          className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
+                          className="w-14 px-1.5 py-1 bg-card/25 border border-card-border rounded text-[11px] text-center font-mono focus:outline-none text-foreground"
                         />
                       </div>
                     </div>
 
-                    {/* Corner Radius (rect, gradient_rect, badge, button) */}
-                    {['rect', 'gradient_rect', 'badge', 'button'].includes(selectedLayer.type) && (
+                    {/* Bring Forward / Send Backward actions */}
+                    <div>
+                      <label className="text-[10px] text-muted-foreground block mb-1">Layer Ordering</label>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={bringForward}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 border border-card-border hover:bg-card/25 rounded text-xs font-semibold text-foreground transition-all"
+                          title="Bring Layer Forward"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                          <span>Bring Forward</span>
+                        </button>
+                        <button
+                          onClick={sendBackward}
+                          className="flex-1 flex items-center justify-center gap-1.5 py-1.5 px-3 border border-card-border hover:bg-card/25 rounded text-xs font-semibold text-foreground transition-all"
+                          title="Send Layer Backward"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                          <span>Send Backward</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Canvas Alignment */}
+                    <div>
+                      <label className="text-[10px] text-muted-foreground block mb-1">Align to Canvas</label>
+                      <div className="grid grid-cols-3 gap-1.5 text-center">
+                        <button
+                          onClick={() => {
+                            if (!selectedLayer) return;
+                            updateSelectedLayer({ x: 0 });
+                          }}
+                          disabled={selectedLayer.locked}
+                          className="py-1 px-2 border border-card-border hover:bg-card/25 rounded text-[10px] font-semibold text-foreground transition-all disabled:opacity-30 cursor-pointer"
+                          title="Align Left"
+                        >
+                          Left
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!selectedLayer) return;
+                            updateSelectedLayer({
+                              x: Math.round((canvasConfig.width - (selectedLayer.width || 100)) / 2)
+                            });
+                          }}
+                          disabled={selectedLayer.locked}
+                          className="py-1 px-2 border border-card-border hover:bg-card/25 rounded text-[10px] font-semibold text-foreground transition-all disabled:opacity-30 cursor-pointer"
+                          title="Align Horizontal Center"
+                        >
+                          Center
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!selectedLayer) return;
+                            updateSelectedLayer({
+                              x: Math.round(canvasConfig.width - (selectedLayer.width || 100))
+                            });
+                          }}
+                          disabled={selectedLayer.locked}
+                          className="py-1 px-2 border border-card-border hover:bg-card/25 rounded text-[10px] font-semibold text-foreground transition-all disabled:opacity-30 cursor-pointer"
+                          title="Align Right"
+                        >
+                          Right
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!selectedLayer) return;
+                            updateSelectedLayer({ y: 0 });
+                          }}
+                          disabled={selectedLayer.locked}
+                          className="py-1 px-2 border border-card-border hover:bg-card/25 rounded text-[10px] font-semibold text-foreground transition-all disabled:opacity-30 cursor-pointer"
+                          title="Align Top"
+                        >
+                          Top
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!selectedLayer) return;
+                            updateSelectedLayer({
+                              y: Math.round((canvasConfig.height - (selectedLayer.height || 100)) / 2)
+                            });
+                          }}
+                          disabled={selectedLayer.locked}
+                          className="py-1 px-2 border border-card-border hover:bg-card/25 rounded text-[10px] font-semibold text-foreground transition-all disabled:opacity-30 cursor-pointer"
+                          title="Align Vertical Center"
+                        >
+                          Middle
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (!selectedLayer) return;
+                            updateSelectedLayer({
+                              y: Math.round(canvasConfig.height - (selectedLayer.height || 100))
+                            });
+                          }}
+                          disabled={selectedLayer.locked}
+                          className="py-1 px-2 border border-card-border hover:bg-card/25 rounded text-[10px] font-semibold text-foreground transition-all disabled:opacity-30 cursor-pointer"
+                          title="Align Bottom"
+                        >
+                          Bottom
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="h-[1px] bg-card-border" />
+
+                  {/* 1b. Element-specific options */}
+                  {['polygon', 'star', 'wave', 'chakra', 'pattern', 'progress_bar', 'rating', 'angled_block', 'qr_code', 'icon', 'checklist', 'ribbon', 'badge', 'speech_bubble'].includes(selectedLayer.type) && (
+                    <>
+                      <div className="space-y-3">
+                        <h4 className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Element Options</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                          {selectedLayer.type === 'polygon' && (
+                            <div><label className="text-[10px] text-muted-foreground block mb-1">Sides</label>
+                              <input type="number" min="3" value={selectedLayer.sides || 3} onChange={(e) => updateSelectedLayer({ sides: Math.max(3, Number(e.target.value)) })} className={fieldCls} /></div>
+                          )}
+                          {selectedLayer.type === 'star' && (<>
+                            <div><label className="text-[10px] text-muted-foreground block mb-1">Points</label>
+                              <input type="number" min="3" value={selectedLayer.numPoints || 5} onChange={(e) => updateSelectedLayer({ numPoints: Math.max(3, Number(e.target.value)) })} className={fieldCls} /></div>
+                            <div><label className="text-[10px] text-muted-foreground block mb-1">Inner Ratio</label>
+                              <input type="number" step="0.05" min="0.1" max="0.9" value={selectedLayer.innerRadiusRatio || 0.4} onChange={(e) => updateSelectedLayer({ innerRadiusRatio: Number(e.target.value) })} className={fieldCls} /></div>
+                          </>)}
+                          {selectedLayer.type === 'wave' && (
+                            <div><label className="text-[10px] text-muted-foreground block mb-1">Wave Count</label>
+                              <input type="number" min="1" value={selectedLayer.count || 2} onChange={(e) => updateSelectedLayer({ count: Math.max(1, Number(e.target.value)) })} className={fieldCls} /></div>
+                          )}
+                          {selectedLayer.type === 'chakra' && (
+                            <div><label className="text-[10px] text-muted-foreground block mb-1">Spokes</label>
+                              <input type="number" min="4" value={selectedLayer.spokes || 24} onChange={(e) => updateSelectedLayer({ spokes: Math.max(4, Number(e.target.value)) })} className={fieldCls} /></div>
+                          )}
+                          {selectedLayer.type === 'pattern' && (<>
+                            <div><label className="text-[10px] text-muted-foreground block mb-1">Pattern</label>
+                              <select value={selectedLayer.variant || 'dots'} onChange={(e) => updateSelectedLayer({ variant: e.target.value })} className={fieldCls}>
+                                <option value="dots">Dots</option><option value="grid">Grid</option><option value="stripes">Stripes</option></select></div>
+                            <div><label className="text-[10px] text-muted-foreground block mb-1">Spacing</label>
+                              <input type="number" min="8" value={selectedLayer.gap || 32} onChange={(e) => updateSelectedLayer({ gap: Math.max(8, Number(e.target.value)) })} className={fieldCls} /></div>
+                          </>)}
+                          {selectedLayer.type === 'progress_bar' && (
+                            <div><label className="text-[10px] text-muted-foreground block mb-1">Value %</label>
+                              <input type="number" min="0" max="100" value={selectedLayer.value ?? 70} onChange={(e) => updateSelectedLayer({ value: Number(e.target.value) })} className={fieldCls} /></div>
+                          )}
+                          {selectedLayer.type === 'rating' && (<>
+                            <div><label className="text-[10px] text-muted-foreground block mb-1">Filled</label>
+                              <input type="number" min="0" value={selectedLayer.value ?? 5} onChange={(e) => updateSelectedLayer({ value: Number(e.target.value) })} className={fieldCls} /></div>
+                            <div><label className="text-[10px] text-muted-foreground block mb-1">Out of</label>
+                              <input type="number" min="1" value={selectedLayer.max || 5} onChange={(e) => updateSelectedLayer({ max: Math.max(1, Number(e.target.value)) })} className={fieldCls} /></div>
+                          </>)}
+                          {selectedLayer.type === 'angled_block' && (<>
+                            <div><label className="text-[10px] text-muted-foreground block mb-1">Direction</label>
+                              <select value={selectedLayer.direction || 'right'} onChange={(e) => updateSelectedLayer({ direction: e.target.value })} className={fieldCls}>
+                                <option value="right">Right</option><option value="left">Left</option><option value="top">Top</option><option value="bottom">Bottom</option></select></div>
+                            <div><label className="text-[10px] text-muted-foreground block mb-1">Skew</label>
+                              <input type="number" step="0.02" min="0" max="0.5" value={selectedLayer.skew ?? 0.18} onChange={(e) => updateSelectedLayer({ skew: Number(e.target.value) })} className={fieldCls} /></div>
+                          </>)}
+                          {selectedLayer.type === 'icon' && (
+                            <div className="col-span-2"><label className="text-[10px] text-muted-foreground block mb-1">Icon</label>
+                              <select value={selectedLayer.icon || 'star'} onChange={(e) => updateSelectedLayer({ icon: e.target.value })} className={fieldCls}>
+                                {Object.keys(ICON_LIBRARY).map((n) => <option key={n} value={n}>{n}</option>)}</select></div>
+                          )}
+                        </div>
+                        {selectedLayer.type === 'qr_code' && (
+                          <div><label className="text-[10px] text-muted-foreground block mb-1">QR Link / Text</label>
+                            <input type="text" value={selectedLayer.value || ''} onChange={(e) => updateSelectedLayer({ value: e.target.value })} placeholder="https://…" className={fieldCls} /></div>
+                        )}
+                        {(selectedLayer.type === 'ribbon' || selectedLayer.type === 'badge' || selectedLayer.type === 'speech_bubble') && (
+                          <div><label className="text-[10px] text-muted-foreground block mb-1">Text</label>
+                            <input type="text" value={selectedLayer.text || ''} onChange={(e) => updateSelectedLayer({ text: e.target.value })} className={fieldCls} /></div>
+                        )}
+                        {selectedLayer.type === 'checklist' && (
+                          <div><label className="text-[10px] text-muted-foreground block mb-1">Items (one per line)</label>
+                            <textarea rows="4" value={(selectedLayer.items || []).join('\n')} onChange={(e) => updateSelectedLayer({ items: e.target.value.split('\n') })} className={`${fieldCls} resize-none`} /></div>
+                        )}
+                      </div>
+                      <div className="h-[1px] bg-card-border" />
+                    </>
+                  )}
+
+                  {/* 2. Text Specific Properties */}
+                  {selectedLayer.type === 'text' && (
+                    <div className="space-y-4">
+                      <h4 className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Typography</h4>
+
+                      <div>
+                        <label className="text-[10px] text-muted-foreground block mb-1">Text Value</label>
+                        <textarea
+                          value={selectedLayer.text}
+                          onChange={(e) => updateSelectedLayer({ text: e.target.value })}
+                          disabled={selectedLayer.locked}
+                          rows={3}
+                          className="w-full px-2.5 py-2 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary disabled:opacity-50 leading-relaxed resize-none text-foreground"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] text-muted-foreground block mb-1">Font Size (px)</label>
+                          <input
+                            type="number"
+                            value={selectedLayer.fontSize}
+                            onChange={(e) => updateSelectedLayer({ fontSize: Number(e.target.value) })}
+                            disabled={selectedLayer.locked}
+                            className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary disabled:opacity-50 font-mono text-foreground"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground block mb-1">Font Family</label>
+                          <select
+                            value={selectedLayer.fontFamily}
+                            onChange={(e) => updateSelectedLayer({ fontFamily: e.target.value })}
+                            disabled={selectedLayer.locked}
+                            className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary disabled:opacity-50 text-foreground"
+                          >
+                            {customFonts.length > 0 && (
+                              <optgroup label="Custom">
+                                {customFonts.map((f) => (
+                                  <option key={f} value={f}>{f}</option>
+                                ))}
+                              </optgroup>
+                            )}
+                            <optgroup label="Google Fonts">
+                              {GOOGLE_FONTS.map((f) => (
+                                <option key={f} value={f}>{f}</option>
+                              ))}
+                            </optgroup>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Custom font upload */}
+                      <div>
+                        <button
+                          onClick={() => fontInputRef.current?.click()}
+                          disabled={selectedLayer.locked}
+                          className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 border border-dashed border-card-border hover:bg-card/25 disabled:opacity-50 rounded text-[11px] font-semibold text-muted-foreground hover:text-foreground transition-all"
+                          title="Upload a .ttf, .otf, .woff or .woff2 font"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Upload Custom Font</span>
+                        </button>
+                        <input
+                          ref={fontInputRef}
+                          type="file"
+                          accept=".ttf,.otf,.woff,.woff2,font/*"
+                          onChange={handleFontFileChange}
+                          className="hidden"
+                        />
+                      </div>
+
+                      {/* Line spacing */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-[10px] text-muted-foreground">Line Spacing</label>
+                          <span className="text-[10px] font-mono text-muted-foreground">{(selectedLayer.lineHeight ?? 1.2).toFixed(2)}</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0.8"
+                          max="3"
+                          step="0.05"
+                          value={selectedLayer.lineHeight ?? 1.2}
+                          onChange={(e) => updateSelectedLayer({ lineHeight: Number(e.target.value) })}
+                          disabled={selectedLayer.locked}
+                          className="w-full accent-primary bg-card-border h-1 rounded"
+                        />
+                      </div>
+
+                      {/* Character (letter) spacing */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1">
+                          <label className="text-[10px] text-muted-foreground">Character Spacing</label>
+                          <span className="text-[10px] font-mono text-muted-foreground">{(selectedLayer.letterSpacing ?? 0)}px</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="-5"
+                          max="40"
+                          step="0.5"
+                          value={selectedLayer.letterSpacing ?? 0}
+                          onChange={(e) => updateSelectedLayer({ letterSpacing: Number(e.target.value) })}
+                          disabled={selectedLayer.locked}
+                          className="w-full accent-primary bg-card-border h-1 rounded"
+                        />
+                      </div>
+
+                      {/* Auto-fit bounding box to text */}
+                      <div className="flex items-center justify-between">
+                        <label className="flex items-center gap-2 text-[10px] text-muted-foreground cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={selectedLayer.autoFit !== false}
+                            onChange={(e) => updateSelectedLayer({ autoFit: e.target.checked })}
+                            disabled={selectedLayer.locked}
+                            className="accent-primary"
+                          />
+                          <span>Fit box to text</span>
+                        </label>
+                        <button
+                          onClick={() => updateSelectedLayer({ autoFit: true })}
+                          disabled={selectedLayer.locked}
+                          className="text-[10px] font-semibold text-primary hover:underline disabled:opacity-50"
+                        >
+                          Fit now
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <div>
+                          <label className="text-[10px] text-muted-foreground block mb-1">Font Weight</label>
+                          <select
+                            value={selectedLayer.fontStyle || 'normal'}
+                            onChange={(e) => updateSelectedLayer({ fontStyle: e.target.value })}
+                            disabled={selectedLayer.locked}
+                            className="px-2 py-1 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary text-foreground"
+                          >
+                            <option value="normal">Normal</option>
+                            <option value="bold">Bold</option>
+                            <option value="italic">Italic</option>
+                            <option value="bold italic">Bold Italic</option>
+                          </select>
+                        </div>
+
+                        <div className="flex-1">
+                          <label className="text-[10px] text-muted-foreground block mb-1">Text Color</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={selectedLayer.fill || '#111827'}
+                              onChange={(e) => updateSelectedLayer({ fill: e.target.value })}
+                              disabled={selectedLayer.locked}
+                              className="w-8 h-8 rounded border border-card-border cursor-pointer bg-transparent"
+                            />
+                            <span className="text-[11px] font-mono text-muted-foreground">{selectedLayer.fill || '#111827'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] text-muted-foreground block mb-1">Alignment</label>
+                        <div className="flex gap-1.5 bg-card-border/10 p-1 rounded-lg w-max">
+                          <button
+                            onClick={() => updateSelectedLayer({ align: 'left' })}
+                            disabled={selectedLayer.locked}
+                            className={`p-1.5 rounded transition-all ${selectedLayer.align === 'left' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-card/20'}`}
+                          >
+                            <AlignLeft className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => updateSelectedLayer({ align: 'center' })}
+                            disabled={selectedLayer.locked}
+                            className={`p-1.5 rounded transition-all ${selectedLayer.align === 'center' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-card/20'}`}
+                          >
+                            <AlignCenter className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => updateSelectedLayer({ align: 'right' })}
+                            disabled={selectedLayer.locked}
+                            className={`p-1.5 rounded transition-all ${selectedLayer.align === 'right' ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-card/20'}`}
+                          >
+                            <AlignRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 3. Shape Specific Properties (Unified Styling Panel) */}
+                  {['rect', 'circle', 'ellipse', 'star', 'polygon', 'blob', 'wave', 'badge', 'button', 'icon_placeholder', 'line', 'arrow', 'gradient_rect'].includes(selectedLayer.type) && (
+                    <div className="space-y-4">
+                      <h4 className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Fill & Border</h4>
+
+                      {/* Standard Color Fill */}
+                      {selectedLayer.type !== 'line' && selectedLayer.type !== 'arrow' && selectedLayer.type !== 'gradient_rect' && (
+                        <div>
+                          <label className="text-[10px] text-muted-foreground block mb-1">Fill Color</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="color"
+                              value={selectedLayer.fill || '#EA580C'}
+                              onChange={(e) => updateSelectedLayer({ fill: e.target.value })}
+                              disabled={selectedLayer.locked}
+                              className="w-8 h-8 rounded border border-card-border cursor-pointer bg-transparent"
+                            />
+                            <span className="text-[11px] font-mono text-muted-foreground uppercase">{selectedLayer.fill || '#EA580C'}</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Gradient Background Options */}
+                      {selectedLayer.type === 'gradient_rect' && (
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-[10px] text-muted-foreground block mb-1">Color Stop 1</label>
+                              <input
+                                type="color"
+                                value={Array.isArray(selectedLayer.fill) ? selectedLayer.fill[0] : (selectedLayer.fill || '#EA580C')}
+                                onChange={(e) => {
+                                  const currentFill = Array.isArray(selectedLayer.fill) ? [...selectedLayer.fill] : [selectedLayer.fill || '#EA580C', '#FDBA74'];
+                                  currentFill[0] = e.target.value;
+                                  updateSelectedLayer({ fill: currentFill });
+                                }}
+                                disabled={selectedLayer.locked}
+                                className="w-8 h-8 rounded border border-card-border cursor-pointer bg-transparent"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-muted-foreground block mb-1">Color Stop 2</label>
+                              <input
+                                type="color"
+                                value={Array.isArray(selectedLayer.fill) ? (selectedLayer.fill[1] || selectedLayer.fill[0]) : '#FDBA74'}
+                                onChange={(e) => {
+                                  const currentFill = Array.isArray(selectedLayer.fill) ? [...selectedLayer.fill] : [selectedLayer.fill || '#EA580C', '#FDBA74'];
+                                  currentFill[1] = e.target.value;
+                                  updateSelectedLayer({ fill: currentFill });
+                                }}
+                                disabled={selectedLayer.locked}
+                                className="w-8 h-8 rounded border border-card-border cursor-pointer bg-transparent"
+                              />
+                            </div>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground block mb-1">Gradient Direction</label>
+                            <select
+                              value={selectedLayer.gradientDirection || 'vertical'}
+                              onChange={(e) => updateSelectedLayer({ gradientDirection: e.target.value })}
+                              disabled={selectedLayer.locked}
+                              className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary text-foreground bg-transparent"
+                            >
+                              <option value="vertical">Vertical</option>
+                              <option value="horizontal">Horizontal</option>
+                              <option value="diagonal">Diagonal</option>
+                            </select>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Stroke options */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] text-muted-foreground block mb-1">Border Color</label>
+                          <input
+                            type="color"
+                            value={selectedLayer.stroke || '#1E293B'}
+                            onChange={(e) => updateSelectedLayer({ stroke: e.target.value })}
+                            disabled={selectedLayer.locked}
+                            className="w-8 h-8 rounded border border-card-border cursor-pointer bg-transparent"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground block mb-1">Border Width</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={selectedLayer.strokeWidth || 0}
+                            onChange={(e) => updateSelectedLayer({ strokeWidth: Number(e.target.value) })}
+                            disabled={selectedLayer.locked}
+                            className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Corner Radius (rect, gradient_rect, badge, button) */}
+                      {['rect', 'gradient_rect', 'badge', 'button'].includes(selectedLayer.type) && (
+                        <div>
+                          <label className="text-[10px] text-muted-foreground block mb-1">Corner Radius (px)</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={selectedLayer.cornerRadius || 0}
+                            onChange={(e) => updateSelectedLayer({ cornerRadius: Number(e.target.value) })}
+                            disabled={selectedLayer.locked}
+                            className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
+                          />
+                        </div>
+                      )}
+
+                      {/* Star options */}
+                      {selectedLayer.type === 'star' && (
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground block mb-1">Points</label>
+                            <input
+                              type="number"
+                              min="3"
+                              max="20"
+                              value={selectedLayer.numPoints || 5}
+                              onChange={(e) => updateSelectedLayer({ numPoints: Number(e.target.value) })}
+                              disabled={selectedLayer.locked}
+                              className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground block mb-1">Inner Ratio</label>
+                            <input
+                              type="number"
+                              step="0.05"
+                              min="0.1"
+                              max="0.9"
+                              value={selectedLayer.innerRadiusRatio || 0.4}
+                              onChange={(e) => updateSelectedLayer({ innerRadiusRatio: Number(e.target.value) })}
+                              disabled={selectedLayer.locked}
+                              className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Polygon options */}
+                      {selectedLayer.type === 'polygon' && (
+                        <div>
+                          <label className="text-[10px] text-muted-foreground block mb-1">Number of Sides</label>
+                          <input
+                            type="number"
+                            min="3"
+                            max="12"
+                            value={selectedLayer.sides || 3}
+                            onChange={(e) => updateSelectedLayer({ sides: Number(e.target.value) })}
+                            disabled={selectedLayer.locked}
+                            className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
+                          />
+                        </div>
+                      )}
+
+                      {/* Badge & Button styling */}
+                      {(selectedLayer.type === 'badge' || selectedLayer.type === 'button') && (
+                        <div className="space-y-3 pt-1">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground block mb-1">Label Text</label>
+                            <input
+                              type="text"
+                              value={selectedLayer.text || ''}
+                              onChange={(e) => updateSelectedLayer({ text: e.target.value })}
+                              disabled={selectedLayer.locked}
+                              className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-semibold text-foreground"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-[10px] text-muted-foreground block mb-1">Label Color</label>
+                              <input
+                                type="color"
+                                value={selectedLayer.textColor || '#FFFFFF'}
+                                onChange={(e) => updateSelectedLayer({ textColor: e.target.value })}
+                                disabled={selectedLayer.locked}
+                                className="w-8 h-8 rounded border border-card-border cursor-pointer bg-transparent"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-muted-foreground block mb-1">Font Size</label>
+                              <input
+                                type="number"
+                                value={selectedLayer.fontSize || 24}
+                                onChange={(e) => updateSelectedLayer({ fontSize: Number(e.target.value) })}
+                                disabled={selectedLayer.locked}
+                                className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Icon Placeholder styling */}
+                      {selectedLayer.type === 'icon_placeholder' && (
+                        <div className="space-y-3 pt-1">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground block mb-1">Icon Symbol (★, ✔, ✉, ☎)</label>
+                            <input
+                              type="text"
+                              maxLength={5}
+                              value={selectedLayer.icon || '★'}
+                              onChange={(e) => updateSelectedLayer({ icon: e.target.value })}
+                              disabled={selectedLayer.locked}
+                              className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none text-foreground"
+                            />
+                          </div>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-[10px] text-muted-foreground block mb-1">Icon Color</label>
+                              <input
+                                type="color"
+                                value={selectedLayer.textColor || '#64748B'}
+                                onChange={(e) => updateSelectedLayer({ textColor: e.target.value })}
+                                disabled={selectedLayer.locked}
+                                className="w-8 h-8 rounded border border-card-border cursor-pointer bg-transparent"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-muted-foreground block mb-1">Icon Size</label>
+                              <input
+                                type="number"
+                                value={selectedLayer.fontSize || 20}
+                                onChange={(e) => updateSelectedLayer({ fontSize: Number(e.target.value) })}
+                                disabled={selectedLayer.locked}
+                                className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                    </div>
+                  )}
+
+                  {/* 4. Image Manager (Image / Image Placeholder specific) */}
+                  {(selectedLayer.type === 'image_placeholder' || selectedLayer.type === 'image') && (
+                    <div className="space-y-4">
+                      <h4 className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Image Manager</h4>
+
+                      <div className="space-y-2">
+                        {selectedLayer.imageUrl ? (
+                          <div className="space-y-3">
+                            <div className="border border-card-border bg-card/25 p-2 rounded-lg relative overflow-hidden h-36 flex items-center justify-center">
+                              <img
+                                src={selectedLayer.imageUrl}
+                                alt="Uploaded visual preview"
+                                className="max-h-full max-w-full rounded object-cover"
+                              />
+                              <button
+                                onClick={removeImage}
+                                className="absolute top-2 right-2 p-1.5 bg-red-600/90 text-white hover:bg-red-700 rounded-full transition-all text-xs"
+                                title="Delete photo"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] text-muted-foreground block mb-1">Image Fit</label>
+                              <select
+                                value={selectedLayer.fit || 'cover'}
+                                onChange={(e) => updateSelectedLayer({ fit: e.target.value })}
+                                className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary text-foreground bg-transparent"
+                              >
+                                <option value="cover">Crop Cover (fill container)</option>
+                                <option value="contain">Contain (entire image)</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] text-muted-foreground block mb-1">Frame Shape</label>
+                              <select
+                                value={selectedLayer.frame || 'rounded'}
+                                onChange={(e) => updateSelectedLayer({ frame: e.target.value })}
+                                className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary text-foreground bg-transparent"
+                              >
+                                <option value="rounded">Rounded Rectangle</option>
+                                <option value="circle">Circle / Oval</option>
+                                <option value="arch">Arch (rounded top)</option>
+                                <option value="diagonal">Diagonal Cut</option>
+                                <option value="hexagon">Hexagon</option>
+                              </select>
+                            </div>
+
+                            <div>
+                              <label className="text-[10px] text-muted-foreground block mb-1">Photo Filter</label>
+                              <select
+                                value={selectedLayer.filter || ''}
+                                onChange={(e) => updateSelectedLayer({ filter: e.target.value || null })}
+                                className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary text-foreground bg-transparent"
+                              >
+                                <option value="">None</option>
+                                <option value="grayscale">Grayscale</option>
+                                <option value="sepia">Sepia</option>
+                                <option value="blur">Blur</option>
+                                <option value="brighten">Brighten</option>
+                                <option value="contrast">Contrast</option>
+                                <option value="invert">Invert</option>
+                              </select>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="border border-dashed border-card-border p-6 rounded-lg text-center bg-card/15 space-y-4">
+                            <div>
+                              <ImageIcon className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2 animate-bounce" />
+                              <button
+                                onClick={() => fileInputRef.current.click()}
+                                className="px-3.5 py-2 bg-primary hover:bg-primary-hover text-white rounded text-xs font-bold transition-all shadow"
+                              >
+                                Upload Custom Photo
+                              </button>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-px bg-card-border" />
+                              <span className="text-[10px] uppercase text-muted-foreground">or</span>
+                              <div className="flex-1 h-px bg-card-border" />
+                            </div>
+
+                            <div className="space-y-2 text-left">
+                              <label className="text-[10px] text-muted-foreground block">Paste image URL</label>
+                              <div className="flex gap-1.5">
+                                <input
+                                  type="text"
+                                  value={imageUrlInput}
+                                  onChange={(e) => setImageUrlInput(e.target.value)}
+                                  onKeyDown={(e) => e.key === 'Enter' && applyImageUrl()}
+                                  placeholder="https://…/photo.jpg"
+                                  className="flex-1 min-w-0 px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary text-foreground bg-transparent"
+                                />
+                                <button
+                                  onClick={applyImageUrl}
+                                  className="px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded text-xs font-bold transition-all shadow whitespace-nowrap"
+                                >
+                                  Add
+                                </button>
+                              </div>
+                              <p className="text-[10px] text-muted-foreground/70 leading-snug">
+                                Paste a direct image link (ending in .jpg/.png/etc). It's fetched through the server so it displays and exports correctly.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Hidden File Input */}
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          onChange={handleImageFileChange}
+                          accept="image/*"
+                          className="hidden"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 pt-2">
+                        <div>
+                          <label className="text-[10px] text-muted-foreground block mb-1">Border Width</label>
+                          <input
+                            type="number"
+                            value={selectedLayer.strokeWidth || 0}
+                            onChange={(e) => updateSelectedLayer({ strokeWidth: Number(e.target.value) })}
+                            disabled={selectedLayer.locked}
+                            className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground block mb-1">Border Color</label>
+                          <input
+                            type="color"
+                            value={selectedLayer.stroke || '#EA580C'}
+                            onChange={(e) => updateSelectedLayer({ stroke: e.target.value })}
+                            disabled={selectedLayer.locked}
+                            className="w-8 h-8 rounded border border-card-border cursor-pointer bg-transparent"
+                          />
+                        </div>
+                      </div>
                       <div>
                         <label className="text-[10px] text-muted-foreground block mb-1">Corner Radius (px)</label>
                         <input
@@ -2154,453 +2433,170 @@ export const PosterEditor = () => {
                           className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
                         />
                       </div>
-                    )}
-
-                    {/* Star options */}
-                    {selectedLayer.type === 'star' && (
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-[10px] text-muted-foreground block mb-1">Points</label>
-                          <input
-                            type="number"
-                            min="3"
-                            max="20"
-                            value={selectedLayer.numPoints || 5}
-                            onChange={(e) => updateSelectedLayer({ numPoints: Number(e.target.value) })}
-                            disabled={selectedLayer.locked}
-                            className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-muted-foreground block mb-1">Inner Ratio</label>
-                          <input
-                            type="number"
-                            step="0.05"
-                            min="0.1"
-                            max="0.9"
-                            value={selectedLayer.innerRadiusRatio || 0.4}
-                            onChange={(e) => updateSelectedLayer({ innerRadiusRatio: Number(e.target.value) })}
-                            disabled={selectedLayer.locked}
-                            className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Polygon options */}
-                    {selectedLayer.type === 'polygon' && (
-                      <div>
-                        <label className="text-[10px] text-muted-foreground block mb-1">Number of Sides</label>
-                        <input
-                          type="number"
-                          min="3"
-                          max="12"
-                          value={selectedLayer.sides || 3}
-                          onChange={(e) => updateSelectedLayer({ sides: Number(e.target.value) })}
-                          disabled={selectedLayer.locked}
-                          className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
-                        />
-                      </div>
-                    )}
-
-                    {/* Badge & Button styling */}
-                    {(selectedLayer.type === 'badge' || selectedLayer.type === 'button') && (
-                      <div className="space-y-3 pt-1">
-                        <div>
-                          <label className="text-[10px] text-muted-foreground block mb-1">Label Text</label>
-                          <input
-                            type="text"
-                            value={selectedLayer.text || ''}
-                            onChange={(e) => updateSelectedLayer({ text: e.target.value })}
-                            disabled={selectedLayer.locked}
-                            className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-semibold text-foreground"
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="text-[10px] text-muted-foreground block mb-1">Label Color</label>
-                            <input
-                              type="color"
-                              value={selectedLayer.textColor || '#FFFFFF'}
-                              onChange={(e) => updateSelectedLayer({ textColor: e.target.value })}
-                              disabled={selectedLayer.locked}
-                              className="w-8 h-8 rounded border border-card-border cursor-pointer bg-transparent"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] text-muted-foreground block mb-1">Font Size</label>
-                            <input
-                              type="number"
-                              value={selectedLayer.fontSize || 24}
-                              onChange={(e) => updateSelectedLayer({ fontSize: Number(e.target.value) })}
-                              disabled={selectedLayer.locked}
-                              className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Icon Placeholder styling */}
-                    {selectedLayer.type === 'icon_placeholder' && (
-                      <div className="space-y-3 pt-1">
-                        <div>
-                          <label className="text-[10px] text-muted-foreground block mb-1">Icon Symbol (★, ✔, ✉, ☎)</label>
-                          <input
-                            type="text"
-                            maxLength={5}
-                            value={selectedLayer.icon || '★'}
-                            onChange={(e) => updateSelectedLayer({ icon: e.target.value })}
-                            disabled={selectedLayer.locked}
-                            className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none text-foreground"
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                          <div>
-                            <label className="text-[10px] text-muted-foreground block mb-1">Icon Color</label>
-                            <input
-                              type="color"
-                              value={selectedLayer.textColor || '#64748B'}
-                              onChange={(e) => updateSelectedLayer({ textColor: e.target.value })}
-                              disabled={selectedLayer.locked}
-                              className="w-8 h-8 rounded border border-card-border cursor-pointer bg-transparent"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-[10px] text-muted-foreground block mb-1">Icon Size</label>
-                            <input
-                              type="number"
-                              value={selectedLayer.fontSize || 20}
-                              onChange={(e) => updateSelectedLayer({ fontSize: Number(e.target.value) })}
-                              disabled={selectedLayer.locked}
-                              className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                  </div>
-                )}
-
-                {/* 4. Image Manager (Image / Image Placeholder specific) */}
-                {(selectedLayer.type === 'image_placeholder' || selectedLayer.type === 'image') && (
-                  <div className="space-y-4">
-                    <h4 className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Image Manager</h4>
-
-                    <div className="space-y-2">
-                      {selectedLayer.imageUrl ? (
-                        <div className="space-y-3">
-                          <div className="border border-card-border bg-card/25 p-2 rounded-lg relative overflow-hidden h-36 flex items-center justify-center">
-                            <img
-                              src={selectedLayer.imageUrl}
-                              alt="Uploaded visual preview"
-                              className="max-h-full max-w-full rounded object-cover"
-                            />
-                            <button
-                              onClick={removeImage}
-                              className="absolute top-2 right-2 p-1.5 bg-red-600/90 text-white hover:bg-red-700 rounded-full transition-all text-xs"
-                              title="Delete photo"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                          
-                          <div>
-                            <label className="text-[10px] text-muted-foreground block mb-1">Image Fit</label>
-                            <select
-                              value={selectedLayer.fit || 'cover'}
-                              onChange={(e) => updateSelectedLayer({ fit: e.target.value })}
-                              className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary text-foreground bg-transparent"
-                            >
-                              <option value="cover">Crop Cover (fill container)</option>
-                              <option value="contain">Contain (entire image)</option>
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="text-[10px] text-muted-foreground block mb-1">Frame Shape</label>
-                            <select
-                              value={selectedLayer.frame || 'rounded'}
-                              onChange={(e) => updateSelectedLayer({ frame: e.target.value })}
-                              className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary text-foreground bg-transparent"
-                            >
-                              <option value="rounded">Rounded Rectangle</option>
-                              <option value="circle">Circle / Oval</option>
-                              <option value="arch">Arch (rounded top)</option>
-                              <option value="diagonal">Diagonal Cut</option>
-                              <option value="hexagon">Hexagon</option>
-                            </select>
-                          </div>
-
-                          <div>
-                            <label className="text-[10px] text-muted-foreground block mb-1">Photo Filter</label>
-                            <select
-                              value={selectedLayer.filter || ''}
-                              onChange={(e) => updateSelectedLayer({ filter: e.target.value || null })}
-                              className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary text-foreground bg-transparent"
-                            >
-                              <option value="">None</option>
-                              <option value="grayscale">Grayscale</option>
-                              <option value="sepia">Sepia</option>
-                              <option value="blur">Blur</option>
-                              <option value="brighten">Brighten</option>
-                              <option value="contrast">Contrast</option>
-                              <option value="invert">Invert</option>
-                            </select>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="border border-dashed border-card-border p-6 rounded-lg text-center bg-card/15 space-y-4">
-                          <div>
-                            <ImageIcon className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2 animate-bounce" />
-                            <button
-                              onClick={() => fileInputRef.current.click()}
-                              className="px-3.5 py-2 bg-primary hover:bg-primary-hover text-white rounded text-xs font-bold transition-all shadow"
-                            >
-                              Upload Custom Photo
-                            </button>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-px bg-card-border" />
-                            <span className="text-[10px] uppercase text-muted-foreground">or</span>
-                            <div className="flex-1 h-px bg-card-border" />
-                          </div>
-
-                          <div className="space-y-2 text-left">
-                            <label className="text-[10px] text-muted-foreground block">Paste image URL</label>
-                            <div className="flex gap-1.5">
-                              <input
-                                type="text"
-                                value={imageUrlInput}
-                                onChange={(e) => setImageUrlInput(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && applyImageUrl()}
-                                placeholder="https://…/photo.jpg"
-                                className="flex-1 min-w-0 px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary text-foreground bg-transparent"
-                              />
-                              <button
-                                onClick={applyImageUrl}
-                                className="px-3 py-1.5 bg-primary hover:bg-primary-hover text-white rounded text-xs font-bold transition-all shadow whitespace-nowrap"
-                              >
-                                Add
-                              </button>
-                            </div>
-                            <p className="text-[10px] text-muted-foreground/70 leading-snug">
-                              Paste a direct image link (ending in .jpg/.png/etc). It's fetched through the server so it displays and exports correctly.
-                            </p>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Hidden File Input */}
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        onChange={handleImageFileChange}
-                        accept="image/*"
-                        className="hidden"
-                      />
                     </div>
+                  )}
 
-                    <div className="grid grid-cols-2 gap-3 pt-2">
-                      <div>
-                        <label className="text-[10px] text-muted-foreground block mb-1">Border Width</label>
-                        <input
-                          type="number"
-                          value={selectedLayer.strokeWidth || 0}
-                          onChange={(e) => updateSelectedLayer({ strokeWidth: Number(e.target.value) })}
-                          disabled={selectedLayer.locked}
-                          className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground block mb-1">Border Color</label>
-                        <input
-                          type="color"
-                          value={selectedLayer.stroke || '#EA580C'}
-                          onChange={(e) => updateSelectedLayer({ stroke: e.target.value })}
-                          disabled={selectedLayer.locked}
-                          className="w-8 h-8 rounded border border-card-border cursor-pointer bg-transparent"
-                        />
-                      </div>
-                    </div>
+                  <div className="h-[1px] bg-card-border" />
+
+                  {/* 5. Soft Shadows Configuration Panel */}
+                  <div className="space-y-3">
+                    <h4 className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Soft Shadows</h4>
+
                     <div>
-                      <label className="text-[10px] text-muted-foreground block mb-1">Corner Radius (px)</label>
-                      <input
-                        type="number"
-                        min="0"
-                        value={selectedLayer.cornerRadius || 0}
-                        onChange={(e) => updateSelectedLayer({ cornerRadius: Number(e.target.value) })}
-                        disabled={selectedLayer.locked}
-                        className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
-                      />
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="text-[10px] text-muted-foreground">Shadow Blur</label>
+                        <span className="text-[10px] font-mono text-muted-foreground">{selectedLayer.shadowBlur || 0}px</span>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <input
+                          type="range"
+                          min="0"
+                          max="50"
+                          value={selectedLayer.shadowBlur || 0}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            updateSelectedLayer({
+                              shadowBlur: val,
+                              shadowColor: val > 0 ? (selectedLayer.shadowColor || '#000000') : null,
+                              shadowOpacity: val > 0 ? (selectedLayer.shadowOpacity !== undefined ? selectedLayer.shadowOpacity : 0.2) : 0,
+                              shadowOffsetY: val > 0 ? (selectedLayer.shadowOffsetY || 4) : 0,
+                              shadowOffsetX: val > 0 ? (selectedLayer.shadowOffsetX || 0) : 0,
+                            });
+                          }}
+                          disabled={selectedLayer.locked}
+                          className="flex-1 accent-primary bg-card-border h-1 rounded"
+                        />
+                        <input
+                          type="number"
+                          min="0"
+                          max="50"
+                          value={selectedLayer.shadowBlur || 0}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            updateSelectedLayer({
+                              shadowBlur: val,
+                              shadowColor: val > 0 ? (selectedLayer.shadowColor || '#000000') : null,
+                              shadowOpacity: val > 0 ? (selectedLayer.shadowOpacity !== undefined ? selectedLayer.shadowOpacity : 0.2) : 0,
+                              shadowOffsetY: val > 0 ? (selectedLayer.shadowOffsetY || 4) : 0,
+                              shadowOffsetX: val > 0 ? (selectedLayer.shadowOffsetX || 0) : 0,
+                            });
+                          }}
+                          disabled={selectedLayer.locked}
+                          className="w-14 px-1.5 py-1 bg-card/25 border border-card-border rounded text-[11px] text-center font-mono focus:outline-none text-foreground"
+                        />
+                      </div>
                     </div>
+
+                    {Number(selectedLayer.shadowBlur) > 0 && (
+                      <div className="space-y-3 pt-1">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground block mb-1">Shadow Color</label>
+                            <input
+                              type="color"
+                              value={selectedLayer.shadowColor || '#000000'}
+                              onChange={(e) => updateSelectedLayer({ shadowColor: e.target.value })}
+                              disabled={selectedLayer.locked}
+                              className="w-8 h-8 rounded border border-card-border cursor-pointer bg-transparent"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground block mb-1">Opacity (0-1)</label>
+                            <input
+                              type="number"
+                              step="0.05"
+                              min="0"
+                              max="1"
+                              value={selectedLayer.shadowOpacity !== undefined ? selectedLayer.shadowOpacity : 0.2}
+                              onChange={(e) => updateSelectedLayer({ shadowOpacity: Number(e.target.value) })}
+                              disabled={selectedLayer.locked}
+                              className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] text-muted-foreground block mb-1">Offset X (px)</label>
+                            <input
+                              type="number"
+                              value={selectedLayer.shadowOffsetX || 0}
+                              onChange={(e) => updateSelectedLayer({ shadowOffsetX: Number(e.target.value) })}
+                              disabled={selectedLayer.locked}
+                              className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-muted-foreground block mb-1">Offset Y (px)</label>
+                            <input
+                              type="number"
+                              value={selectedLayer.shadowOffsetY || 0}
+                              onChange={(e) => updateSelectedLayer({ shadowOffsetY: Number(e.target.value) })}
+                              disabled={selectedLayer.locked}
+                              className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
 
-                <div className="h-[1px] bg-card-border" />
+                  <div className="h-[1px] bg-card-border" />
 
-                {/* 5. Soft Shadows Configuration Panel */}
-                <div className="space-y-3">
-                  <h4 className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Soft Shadows</h4>
-                  
-                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="text-[10px] text-muted-foreground">Shadow Blur</label>
-                      <span className="text-[10px] font-mono text-muted-foreground">{selectedLayer.shadowBlur || 0}px</span>
-                    </div>
-                    <div className="flex gap-2 items-center">
+                  {/* 6. Settings (Opacity, Lock, Delete/Duplicate) */}
+                  <div className="space-y-4">
+                    <h4 className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Layer Actions</h4>
+
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="text-[10px] text-muted-foreground">Opacity</label>
+                        <span className="text-[10px] font-mono text-muted-foreground">{Math.round((selectedLayer.opacity || 1) * 100)}%</span>
+                      </div>
                       <input
                         type="range"
                         min="0"
-                        max="50"
-                        value={selectedLayer.shadowBlur || 0}
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          updateSelectedLayer({
-                            shadowBlur: val,
-                            shadowColor: val > 0 ? (selectedLayer.shadowColor || '#000000') : null,
-                            shadowOpacity: val > 0 ? (selectedLayer.shadowOpacity !== undefined ? selectedLayer.shadowOpacity : 0.2) : 0,
-                            shadowOffsetY: val > 0 ? (selectedLayer.shadowOffsetY || 4) : 0,
-                            shadowOffsetX: val > 0 ? (selectedLayer.shadowOffsetX || 0) : 0,
-                          });
-                        }}
+                        max="1"
+                        step="0.05"
+                        value={selectedLayer.opacity !== undefined ? selectedLayer.opacity : 1}
+                        onChange={(e) => updateSelectedLayer({ opacity: Number(e.target.value) })}
                         disabled={selectedLayer.locked}
-                        className="flex-1 accent-primary bg-card-border h-1 rounded"
-                      />
-                      <input
-                        type="number"
-                        min="0"
-                        max="50"
-                        value={selectedLayer.shadowBlur || 0}
-                        onChange={(e) => {
-                          const val = Number(e.target.value);
-                          updateSelectedLayer({
-                            shadowBlur: val,
-                            shadowColor: val > 0 ? (selectedLayer.shadowColor || '#000000') : null,
-                            shadowOpacity: val > 0 ? (selectedLayer.shadowOpacity !== undefined ? selectedLayer.shadowOpacity : 0.2) : 0,
-                            shadowOffsetY: val > 0 ? (selectedLayer.shadowOffsetY || 4) : 0,
-                            shadowOffsetX: val > 0 ? (selectedLayer.shadowOffsetX || 0) : 0,
-                          });
-                        }}
-                        disabled={selectedLayer.locked}
-                        className="w-14 px-1.5 py-1 bg-card/25 border border-card-border rounded text-[11px] text-center font-mono focus:outline-none text-foreground"
+                        className="w-full accent-primary bg-card-border h-1 rounded"
                       />
                     </div>
-                  </div>
 
-                  {Number(selectedLayer.shadowBlur) > 0 && (
-                    <div className="space-y-3 pt-1">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-[10px] text-muted-foreground block mb-1">Shadow Color</label>
-                          <input
-                            type="color"
-                            value={selectedLayer.shadowColor || '#000000'}
-                            onChange={(e) => updateSelectedLayer({ shadowColor: e.target.value })}
-                            disabled={selectedLayer.locked}
-                            className="w-8 h-8 rounded border border-card-border cursor-pointer bg-transparent"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-muted-foreground block mb-1">Opacity (0-1)</label>
-                          <input
-                            type="number"
-                            step="0.05"
-                            min="0"
-                            max="1"
-                            value={selectedLayer.shadowOpacity !== undefined ? selectedLayer.shadowOpacity : 0.2}
-                            onChange={(e) => updateSelectedLayer({ shadowOpacity: Number(e.target.value) })}
-                            disabled={selectedLayer.locked}
-                            className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
-                          />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-[10px] text-muted-foreground block mb-1">Offset X (px)</label>
-                          <input
-                            type="number"
-                            value={selectedLayer.shadowOffsetX || 0}
-                            onChange={(e) => updateSelectedLayer({ shadowOffsetX: Number(e.target.value) })}
-                            disabled={selectedLayer.locked}
-                            className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-muted-foreground block mb-1">Offset Y (px)</label>
-                          <input
-                            type="number"
-                            value={selectedLayer.shadowOffsetY || 0}
-                            onChange={(e) => updateSelectedLayer({ shadowOffsetY: Number(e.target.value) })}
-                            disabled={selectedLayer.locked}
-                            className="w-full px-2.5 py-1.5 bg-card/25 border border-card-border rounded text-xs focus:outline-none focus:border-primary font-mono text-foreground"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="h-[1px] bg-card-border" />
-
-                {/* 6. Settings (Opacity, Lock, Delete/Duplicate) */}
-                <div className="space-y-4">
-                  <h4 className="text-[11px] uppercase font-bold text-muted-foreground tracking-wider">Layer Actions</h4>
-
-                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="text-[10px] text-muted-foreground">Opacity</label>
-                      <span className="text-[10px] font-mono text-muted-foreground">{Math.round((selectedLayer.opacity || 1) * 100)}%</span>
-                    </div>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.05"
-                      value={selectedLayer.opacity !== undefined ? selectedLayer.opacity : 1}
-                      onChange={(e) => updateSelectedLayer({ opacity: Number(e.target.value) })}
-                      disabled={selectedLayer.locked}
-                      className="w-full accent-primary bg-card-border h-1 rounded"
-                    />
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => updateSelectedLayer({ locked: !selectedLayer.locked })}
-                      className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 border rounded text-xs font-semibold transition-all ${
-                        selectedLayer.locked 
-                          ? 'border-red-500/30 bg-red-500/10 text-red-500 hover:bg-red-500/20' 
+                    <div className="flex items-center gap-3">
+                      <button
+                        onClick={() => updateSelectedLayer({ locked: !selectedLayer.locked })}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 border rounded text-xs font-semibold transition-all ${selectedLayer.locked
+                          ? 'border-red-500/30 bg-red-500/10 text-red-500 hover:bg-red-500/20'
                           : 'border-card-border hover:bg-card/25 text-foreground'
-                      }`}
-                    >
-                      <span>{selectedLayer.locked ? 'Unlock Layer' : 'Lock Layer'}</span>
-                    </button>
+                          }`}
+                      >
+                        <span>{selectedLayer.locked ? 'Unlock Layer' : 'Lock Layer'}</span>
+                      </button>
 
-                    <button
-                      onClick={duplicateLayer}
-                      disabled={selectedLayer.locked}
-                      className="p-2 border border-card-border hover:bg-card/25 rounded text-muted-foreground hover:text-foreground transition-all disabled:opacity-30"
-                      title="Duplicate Layer"
-                    >
-                      <Copy className="w-4 h-4" />
-                    </button>
-                    
-                    <button
-                      onClick={deleteLayer}
-                      disabled={selectedLayer.locked}
-                      className="p-2 border border-card-border hover:bg-red-950/20 hover:border-red-800 text-muted-foreground hover:text-red-500 rounded transition-all disabled:opacity-30"
-                      title="Delete Layer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                      <button
+                        onClick={duplicateLayer}
+                        disabled={selectedLayer.locked}
+                        className="p-2 border border-card-border hover:bg-card/25 rounded text-muted-foreground hover:text-foreground transition-all disabled:opacity-30"
+                        title="Duplicate Layer"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        onClick={deleteLayer}
+                        disabled={selectedLayer.locked}
+                        className="p-2 border border-card-border hover:bg-red-950/20 hover:border-red-800 text-muted-foreground hover:text-red-500 rounded transition-all disabled:opacity-30"
+                        title="Delete Layer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
-                </div>
 
-              </div>
-            )}
-          </div>
+                </div>
+              )}
+            </div>
           )}
         </aside>
 

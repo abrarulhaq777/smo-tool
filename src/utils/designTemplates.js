@@ -173,7 +173,7 @@ export function getDefaultPosterTemplate(businessType = 'Business', goal = 'Spec
   const norm = businessType.toLowerCase();
 
   let key = 'restaurant_offer'; // Default fallback
-  
+
   if (norm.includes('hotel') || norm.includes('stay') || norm.includes('resort') || norm.includes('travel') || norm.includes('room')) {
     key = 'hotel_booking';
   } else if (norm.includes('dent') || norm.includes('ortho') || norm.includes('clinic') || norm.includes('doctor') || norm.includes('physio')) {
